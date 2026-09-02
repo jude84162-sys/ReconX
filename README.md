@@ -83,7 +83,8 @@ Configuration:
 Output Options:
   -o, --output     Export results (json, csv, txt)
   -f, --file       Output filename
-  --no-banner      Skip the banner display
+  --no-banner, --quiet
+                   Skip the banner display
   --list           List all available modules
 ```
 

@@ -7,17 +7,16 @@ name = "reconx"
 version = "1.1.0"
 description = "All-in-One OSINT Suite - Username, Email, Domain, IP Intelligence"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.8"
 authors = [
-    {name = "jude84162-sys", email = ""},
+    {name = "jude84162-sys"},
 ]
 keywords = ["osint", "reconnaissance", "security", "username-search", "domain-intelligence", "ip-geolocation", "email-recon", "infosec"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Information Technology",
     "Topic :: Security",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",

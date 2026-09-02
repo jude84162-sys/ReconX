@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -48,7 +49,13 @@ def create_parser():
     output_group = parser.add_argument_group("Output Options")
     output_group.add_argument("-o", "--output", choices=["json", "csv", "txt"], help="Export results to file")
     output_group.add_argument("-f", "--file", help="Output filename (default: reconx_results.<ext>)")
-    output_group.add_argument("--no-banner", action="store_true", help="Skip the banner display")
+    output_group.add_argument(
+        "--no-banner",
+        "--quiet",
+        dest="no_banner",
+        action="store_true",
+        help="Skip the banner display",
+    )
 
     # Info
     parser.add_argument("--list", action="store_true", help="List all available modules")
@@ -90,6 +97,10 @@ def export_results(results, format_type, filename):
     """Export results to a file."""
     if not filename:
         filename = f"reconx_results.{format_type}"
+    else:
+        parent = os.path.dirname(os.path.abspath(filename))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
 
     if format_type == "json":
         with open(filename, "w", encoding="utf-8") as f:
