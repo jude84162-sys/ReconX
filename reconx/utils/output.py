@@ -6,6 +6,12 @@ from rich import box
 console = Console()
 
 
+def set_quiet(enabled: bool):
+    """Enable or disable quiet mode (suppresses all Rich output)."""
+    global console
+    console = Console(quiet=enabled)
+
+
 def print_banner():
     """Print the ReconX banner."""
     banner = r"""

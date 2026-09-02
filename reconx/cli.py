@@ -131,7 +131,14 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-    if not args.no_banner:
+    if args.quiet:
+        args.no_banner = True
+        from reconx.utils.output import set_quiet
+        set_quiet(True)
+        global console
+        from rich.console import Console as _C
+        console = _C(quiet=True)
+    elif not args.no_banner:
         print_banner()
 
     if args.list:
@@ -192,8 +199,9 @@ def main():
             traceback.print_exc()
         sys.exit(1)
 
-    elapsed = time.time() - start_time
-    console.print(f"\n[bold cyan]Completed in {elapsed:.2f} seconds[/bold cyan]")
+    if not args.quiet:
+        elapsed = time.time() - start_time
+        console.print(f"\n[bold cyan]Completed in {elapsed:.2f} seconds[/bold cyan]")
 
     # Export results if requested
     if args.output and module:
