@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "reconx"
+version = "1.1.0"
+description = "All-in-One OSINT Suite - Username, Email, Domain, IP Intelligence"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "jude84162-sys", email = ""},
+]
+keywords = ["osint", "reconnaissance", "security", "username-search", "domain-intelligence", "ip-geolocation", "email-recon", "infosec"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "requests>=2.28.0",
+    "rich>=13.0.0",
+    "dnspython>=2.4.0",
+    "python-whois>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.0",
+    "flake8>=6.0",
+    "black>=23.0",
+    "isort>=5.12",
+    "bandit>=1.7",
+    "build>=1.0",
+    "twine>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jude84162-sys/ReconX"
+Documentation = "https://github.com/jude84162-sys/ReconX#readme"
+Repository = "https://github.com/jude84162-sys/ReconX"
+"Bug Tracker" = "https://github.com/jude84162-sys/ReconX/issues"
+
+[project.scripts]
+reconx = "reconx.cli:main"
+
+[tool.black]
+line-length = 120
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.bandit]
+target = ["reconx"]
+skips = ["B101", "B311", "B404", "B603"]
+
+[tool.setuptools.packages.find]
+include = ["reconx*"]
