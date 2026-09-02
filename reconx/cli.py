@@ -49,12 +49,11 @@ def create_parser():
     output_group = parser.add_argument_group("Output Options")
     output_group.add_argument("-o", "--output", choices=["json", "csv", "txt"], help="Export results to file")
     output_group.add_argument("-f", "--file", help="Output filename (default: reconx_results.<ext>)")
+    output_group.add_argument("--no-banner", action="store_true", help="Skip the banner display")
     output_group.add_argument(
-        "--no-banner",
         "--quiet",
-        dest="no_banner",
         action="store_true",
-        help="Skip the banner display",
+        help="Suppress banner and non-essential output (for scripting)",
     )
 
     # Info

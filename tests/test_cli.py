@@ -68,10 +68,11 @@ class TestCLI(unittest.TestCase):
         args = parser.parse_args(["-u", "test", "--no-banner"])
         self.assertTrue(args.no_banner)
 
-    def test_quiet_flag_aliases_no_banner(self):
+    def test_quiet_flag(self):
         parser = create_parser()
         args = parser.parse_args(["-u", "test", "--quiet"])
-        self.assertTrue(args.no_banner)
+        self.assertTrue(args.quiet)
+        self.assertFalse(args.no_banner)
 
     def test_verbose_flag(self):
         parser = create_parser()
