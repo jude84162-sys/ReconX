@@ -1,5 +1,7 @@
-use reqwest::StatusCode;
+#![allow(unused_variables)]
+#![allow(dead_code)]
 use reconx_core::{ReconError, Result};
+use reqwest::StatusCode;
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -40,7 +42,10 @@ pub async fn check(email: &str, timeout: u64) -> Result<Option<GravatarInfo>> {
     }
 
     if !response.status().is_success() {
-        return Err(ReconError::Api(format!("Gravatar request failed: {}", response.status())));
+        return Err(ReconError::Api(format!(
+            "Gravatar request failed: {}",
+            response.status()
+        )));
     }
 
     let payload: GravatarResponse = response
@@ -48,7 +53,11 @@ pub async fn check(email: &str, timeout: u64) -> Result<Option<GravatarInfo>> {
         .await
         .map_err(|e| ReconError::Parse(format!("Gravatar parse error: {e}")))?;
 
-    let display_name = payload.entry.into_iter().next().and_then(|entry| entry.display_name);
+    let display_name = payload
+        .entry
+        .into_iter()
+        .next()
+        .and_then(|entry| entry.display_name);
     Ok(Some(GravatarInfo {
         found: display_name.is_some(),
         display_name,

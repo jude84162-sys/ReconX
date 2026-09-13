@@ -1,11 +1,14 @@
+#![allow(unused_variables)]
+#![allow(dead_code)]
 use chrono::Utc;
-use reconx_core::{ReconError, Result};
+
 
 use crate::{
-    breachdir, emailrep, gravatar, hibp, risk, BreachEntry, BreachReport, EmailInput, GravatarInfo,
-    ReputationInfo, RiskLevel,
+    breachdir, emailrep, gravatar, hibp, risk, BreachReport, GravatarInfo,
+    RiskLevel,
 };
 
+#[allow(clippy::manual_unwrap_or_default)]
 pub async fn scan_all(email: &str, timeout_secs: u64) -> BreachReport {
     let mut merged = Vec::new();
     let reputation = match emailrep::check(email, timeout_secs).await {

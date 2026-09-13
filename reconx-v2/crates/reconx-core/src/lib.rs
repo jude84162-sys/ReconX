@@ -45,7 +45,10 @@ pub struct ScanResult<T> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Authorization {
     SelfOwned,
-    PentestWithConsent { reason: String, consent_file: PathBuf },
+    PentestWithConsent {
+        reason: String,
+        consent_file: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

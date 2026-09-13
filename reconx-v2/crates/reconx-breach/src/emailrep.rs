@@ -1,5 +1,7 @@
-use reqwest::StatusCode;
+#![allow(unused_variables)]
+#![allow(dead_code)]
 use reconx_core::{ReconError, Result};
+use reqwest::StatusCode;
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -42,7 +44,10 @@ pub async fn check(email: &str, timeout: u64) -> Result<Option<ReputationInfo>> 
     }
 
     if !response.status().is_success() {
-        return Err(ReconError::Api(format!("EmailRep request failed: {}", response.status())));
+        return Err(ReconError::Api(format!(
+            "EmailRep request failed: {}",
+            response.status()
+        )));
     }
 
     let payload: EmailRepResponse = response

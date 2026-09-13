@@ -1,5 +1,3 @@
-use chrono::Utc;
-use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -10,7 +8,11 @@ pub fn init_tracing(verbose: bool) {
     let filter = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(log_level))
         .unwrap_or_else(|_| EnvFilter::new(log_level));
-    let subscriber = fmt().with_env_filter(filter).with_target(false).without_time().finish();
+    let subscriber = fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .without_time()
+        .finish();
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 

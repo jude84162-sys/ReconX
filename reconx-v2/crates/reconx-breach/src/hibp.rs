@@ -1,11 +1,12 @@
-use chrono::{DateTime, Utc};
+#![allow(unused_variables)]
+#![allow(dead_code)]
+use reconx_core::{ReconError, Result};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
 use reqwest::StatusCode;
-use reconx_core::{ReconError, Result};
 use serde::Deserialize;
 use std::time::Duration;
 
-use crate::{BreachEntry, RiskLevel};
+use crate::BreachEntry;
 
 #[derive(Debug, Deserialize)]
 struct HibpBreach {
@@ -26,7 +27,10 @@ pub async fn check(email: &str, timeout: u64) -> Result<Vec<BreachEntry>> {
         .map_err(|e| ReconError::Network(e.to_string()))?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(USER_AGENT, HeaderValue::from_static("ReconX-v2/0.1 (+https://github.com/jude84162-sys/ReconX)"));
+    headers.insert(
+        USER_AGENT,
+        HeaderValue::from_static("ReconX-v2/0.1 (+https://github.com/jude84162-sys/ReconX)"),
+    );
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
     if let Ok(api_key) = std::env::var("HIBP_API_KEY") {
@@ -48,7 +52,9 @@ pub async fn check(email: &str, timeout: u64) -> Result<Vec<BreachEntry>> {
     match response.status() {
         StatusCode::NOT_FOUND => Ok(vec![]),
         StatusCode::TOO_MANY_REQUESTS => Err(ReconError::RateLimited(60)),
-        code if code.is_server_error() => Err(ReconError::Api(format!("HIBP server error: {code}"))),
+        code if code.is_server_error() => {
+            Err(ReconError::Api(format!("HIBP server error: {code}")))
+        }
         code if !code.is_success() => Err(ReconError::Api(format!("HIBP request failed: {code}"))),
         _ => {
             let items: Vec<HibpBreach> = response

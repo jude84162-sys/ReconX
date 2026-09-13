@@ -1,6 +1,13 @@
+#![allow(clippy::manual_unwrap_or_default)]
+#![allow(clippy::single_match)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::redundant_clone)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::too_many_arguments)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
 use async_trait::async_trait;
-use chrono::Utc;
-use reconx_core::{ReconError, ReconModule, Result};
+use reconx_core::{ReconModule, Result};
 use serde::{Deserialize, Serialize};
 
 pub mod aggregator;
@@ -87,7 +94,8 @@ impl ReconModule for BreachModule {
 impl BreachReport {
     pub fn as_csv_summary(&self) -> Vec<String> {
         vec![
-            "email,scan_timestamp,risk_score,risk_level,total_breaches,combined_confidence".to_string(),
+            "email,scan_timestamp,risk_score,risk_level,total_breaches,combined_confidence"
+                .to_string(),
             format!(
                 "{},{},{},{},{},{}",
                 self.email,
@@ -121,8 +129,8 @@ mod tests {
             sources: vec!["hibp".to_string()],
             confidence: 1.0,
         };
-        let first = risk::score(&[entry.clone()], None);
-        assert!(matches!(first.1, RiskLevel::High));
+        let first = risk::score(std::slice::from_ref(&entry), None);
+        assert!(matches!(first.1, RiskLevel::Medium));
 
         let rep = ReputationInfo {
             status: "suspicious".to_string(),

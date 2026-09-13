@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use reconx_breach::{BreachModule, BreachReport, EmailInput};
 use reconx_core::{validate_email, AuditEntry, ReconModule};
+use std::path::PathBuf;
+use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(name = "reconx", version, about = "ReconX v2 OSINT")]
@@ -54,7 +54,7 @@ async fn main() -> ExitCode {
             output,
             file,
             verbose,
-            breaches_only,
+            breaches_only: _,
             timeout,
         } => {
             reconx_common::init_tracing(verbose);

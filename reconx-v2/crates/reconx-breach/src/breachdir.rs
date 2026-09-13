@@ -1,6 +1,7 @@
-use async_trait::async_trait;
-use reqwest::StatusCode;
+#![allow(unused_variables)]
+#![allow(dead_code)]
 use reconx_core::{ReconError, Result};
+use reqwest::StatusCode;
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -38,7 +39,10 @@ pub async fn check(email: &str, timeout: u64) -> Result<Vec<BreachEntry>> {
     }
 
     if !response.status().is_success() {
-        return Err(ReconError::Api(format!("BreachDirectory request failed: {}", response.status())));
+        return Err(ReconError::Api(format!(
+            "BreachDirectory request failed: {}",
+            response.status()
+        )));
     }
 
     let payload: Vec<BreachDirRecord> = response

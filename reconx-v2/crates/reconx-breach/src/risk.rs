@@ -1,15 +1,29 @@
+#![allow(unused_variables)]
+#![allow(dead_code)]
 use crate::{BreachEntry, GravatarInfo, ReputationInfo, RiskLevel};
 
 pub fn score(breaches: &[BreachEntry], reputation: Option<&ReputationInfo>) -> (u8, RiskLevel) {
     let mut score = breaches.iter().fold(0u8, |acc, item| {
         let mut item_score = 10u8;
-        if item.compromised_data.iter().any(|value| value.to_ascii_lowercase().contains("password")) {
+        if item
+            .compromised_data
+            .iter()
+            .any(|value| value.to_ascii_lowercase().contains("password"))
+        {
             item_score += 25;
         }
-        if item.compromised_data.iter().any(|value| value.to_ascii_lowercase().contains("email")) {
+        if item
+            .compromised_data
+            .iter()
+            .any(|value| value.to_ascii_lowercase().contains("email"))
+        {
             item_score += 10;
         }
-        if item.sources.iter().any(|source| source.to_ascii_lowercase().contains("hibp")) {
+        if item
+            .sources
+            .iter()
+            .any(|source| source.to_ascii_lowercase().contains("hibp"))
+        {
             item_score += 12;
         }
         acc.saturating_add(item_score.min(45))
