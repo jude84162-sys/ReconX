@@ -1,5 +1,26 @@
+# Rust
 /target
 **/*.rs.bk
+target/
+
+# Env
 .env
+.env.local
+
+# Logs
 *.log
+build.log
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Editor backups
+*.save
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
