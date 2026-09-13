@@ -226,3 +226,38 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Made with ❤️ by [jude84162-sys](https://github.com/jude84162-sys)**
 
 </div>
+
+
+---
+
+## 🦀 ReconX v2 (Rust)
+
+ReconX is being rewritten in Rust for **speed, safety, and async I/O**.
+
+**Location:** [`reconx-v2/`](./reconx-v2/)
+
+### Quick start
+
+    cd reconx-v2
+    cargo build --release
+    ./target/release/reconx email your@email.com --self
+
+### Features
+
+- ⚡ **Async parallel scanning** with tokio
+- 📧 **4 APIs**: HIBP, EmailRep, BreachDirectory, Gravatar
+- 🎯 **Risk scoring** (0-100)
+- 📊 **JSON / CSV / TXT** output
+- 📝 **Audit logging** to `~/.reconx/audit.log`
+- 🔐 **Legal compliance** with `--self` / `--authorized-for`
+
+### Status
+
+- **v0.2.0** — Email breach intelligence ✅
+- **v0.3.0** — Username scanner 🚧 (planned)
+- **v0.4.0** — Image EXIF 🚧 (planned)
+- **v0.5.0** — Phone recon 🚧 (planned)
+- **v0.6.0** — Gmail intel 🚧 (planned)
+- **v0.7.0** — Web dashboard 🚧 (planned)
+
+See [**reconx-v2/README.md**](./reconx-v2/README.md) for full documentation.
