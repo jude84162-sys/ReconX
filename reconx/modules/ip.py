@@ -1,9 +1,47 @@
 import json
+import os
 from reconx.core.engine import Module
 from reconx.utils.http import safe_request, reverse_dns
 from reconx.utils.output import (
     print_found, print_not_found, print_error, print_info, print_success, print_warning,
 )
+
+
+def _load_runtime_config():
+    """Load a local JSON configuration file if present."""
+    config_paths = [
+        os.path.join(os.getcwd(), "config.json"),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json"),
+        os.path.join(os.path.expanduser("~"), ".reconx", "config.json"),
+    ]
+
+    for config_path in config_paths:
+        if not os.path.exists(config_path):
+            continue
+        try:
+            with open(config_path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            if isinstance(data, dict):
+                return data
+        except (OSError, ValueError, TypeError):
+            continue
+    return {}
+
+
+def _resolve_abuseipdb_api_key():
+    """Resolve the AbuseIPDB key from env vars or local config files."""
+    for key in ("ABUSEIPDB_API_KEY", "abuseipdb_api_key"):
+        value = os.environ.get(key)
+        if value and value.strip():
+            return value.strip()
+
+    config_data = _load_runtime_config()
+    for key in ("ABUSEIPDB_API_KEY", "abuseipdb_api_key"):
+        value = config_data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return ""
 
 
 class IPRecon(Module):
@@ -121,9 +159,13 @@ class IPRecon(Module):
         """Check threat intelligence sources."""
         print_info("Checking threat intelligence sources...")
 
-        # AbuseIPDB (free with key, but we can show the concept)
-        print_info("AbuseIPDB: Requires API key for results. Get free key at abuseipdb.com")
-        self.add_result("AbuseIPDB", "https://www.abuseipdb.com/check/{self.target}".format(target=self.target), "api_key_required")
+        # AbuseIPDB
+        api_key = _resolve_abuseipdb_api_key()
+        if api_key:
+            self._check_abuseipdb(api_key)
+        else:
+            print_warning("AbuseIPDB: No API key configured. Set ABUSEIPDB_API_KEY or add it to config.json.")
+            self.add_result("AbuseIPDB", f"https://www.abuseipdb.com/check/{self.target}", "no_api_key")
 
         # VirusTotal
         print_info("VirusTotal: Checking public report...")
@@ -152,6 +194,56 @@ class IPRecon(Module):
                 self.add_result("AlienVault OTX", "0 pulses", "clean")
         else:
             print_warning("AlienVault OTX: Could not retrieve data")
+
+    def _check_abuseipdb(self, api_key):
+        """Check AbuseIPDB for the given IP."""
+        url = "https://api.abuseipdb.com/api/v2/check"
+        headers = {
+            "Key": api_key,
+            "Accept": "application/json",
+        }
+        params = {
+            "ipAddress": self.target,
+            "maxAgeInDays": 30,
+        }
+        resp = safe_request(url, method="GET", timeout=self.timeout, headers=headers, params=params)
+        if resp and resp.status_code == 200:
+            data = resp.json()
+            result = data.get("data", {})
+            abuse_confidence = result.get("abuseConfidenceScore", 0)
+            is_tor = result.get("isTor", False)
+            is_trusted = result.get("isWhitelisted", False)
+            country = result.get("countryCode", "N/A")
+            reports = result.get("totalReports", 0)
+
+            print_success(f"AbuseIPDB Confidence Score: {abuse_confidence}%")
+            print_success(f"Total Reports: {reports}")
+            print_success(f"Country: {country}")
+            print_success(f"Tor Exit Node: {is_tor}")
+            print_success(f"Whitelisted: {is_trusted}")
+
+            self.add_result(
+                "AbuseIPDB",
+                f"https://www.abuseipdb.com/check/{self.target}",
+                "found",
+                {
+                    "abuseConfidenceScore": abuse_confidence,
+                    "totalReports": reports,
+                    "countryCode": country,
+                    "isTor": is_tor,
+                    "isWhitelisted": is_trusted,
+                },
+            )
+        else:
+            msg = ""
+            if resp:
+                try:
+                    err_data = resp.json()
+                    msg = err_data.get("errors", [{}])[0].get("detail", resp.reason)
+                except Exception:
+                    msg = resp.reason or "unknown error"
+            print_warning(f"AbuseIPDB: {msg}")
+            self.add_result("AbuseIPDB", f"https://www.abuseipdb.com/check/{self.target}", "error", {"detail": msg})
 
     def _ports_check(self):
         """Check common ports (basic TCP connect)."""

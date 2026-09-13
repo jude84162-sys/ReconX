@@ -3,8 +3,10 @@
 import unittest
 import json
 import os
+import tempfile
 from unittest.mock import patch
 from reconx.cli import create_parser
+from reconx.modules.ip import _resolve_abuseipdb_api_key
 
 
 class TestCLI(unittest.TestCase):
@@ -101,6 +103,24 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.output, "csv")
         self.assertTrue(args.verbose)
         self.assertTrue(args.no_banner)
+
+
+class TestIPConfig(unittest.TestCase):
+    def test_env_var_has_priority(self):
+        with patch.dict(os.environ, {"ABUSEIPDB_API_KEY": "env-key"}, clear=False):
+            self.assertEqual(_resolve_abuseipdb_api_key(), "env-key")
+
+    def test_json_config_file_is_read(self):
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = os.path.join(tmpdir, "config.json")
+            with open(config_path, "w", encoding="utf-8") as handle:
+                json.dump({"abuseipdb_api_key": "file-key"}, handle)
+            try:
+                os.chdir(tmpdir)
+                self.assertEqual(_resolve_abuseipdb_api_key(), "file-key")
+            finally:
+                os.chdir(old_cwd)
 
 
 class TestExportResults(unittest.TestCase):

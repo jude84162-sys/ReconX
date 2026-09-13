@@ -122,6 +122,19 @@ reconx -i 8.8.8.8
 reconx -i 1.1.1.1 -o csv -f ip_report.csv
 ```
 
+### Configuring API Keys
+For enhanced threat intelligence (AbuseIPDB), set the API key as an environment variable:
+
+```bash
+# Linux/macOS
+export ABUSEIPDB_API_KEY="your_api_key_here"
+
+# Windows PowerShell
+$env:ABUSEIPDB_API_KEY="your_api_key_here"
+
+# Or create a config.json file (see config.json.example)
+```
+
 ### List Modules
 ```bash
 reconx --list
