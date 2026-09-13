@@ -6,16 +6,15 @@ edition.workspace = true
 [dependencies]
 reconx-core = { path = "../reconx-core" }
 reconx-common = { path = "../reconx-common" }
-tokio = { workspace = true }
-reqwest = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-chrono = { workspace = true }
-md5 = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
-futures = { workspace = true }
-tracing = { workspace = true }
-anyhow = { workspace = true }
-regex = { workspace = true }
-url = { workspace = true }
+tokio.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+md5.workspace = true
+sha2.workspace = true
+hex.workspace = true
+futures.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true

@@ -80,7 +80,7 @@ pub struct AuditEntry {
     pub user_id: String,
     pub action: String,
     pub target: String,
-    pub authorization: Authorization,
+    pub authorization: String,
     pub result: String,
 }
 

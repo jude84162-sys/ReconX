@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::{ReputationInfo, BreachEntry};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct EmailRepResponse {
     #[serde(rename = "reputation")]
     reputation: Option<f64>,
@@ -13,7 +13,7 @@ struct EmailRepResponse {
     details: Option<EmailRepDetails>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct EmailRepDetails {
     #[serde(rename = "breaches")]
     breaches: Option<u32>,
