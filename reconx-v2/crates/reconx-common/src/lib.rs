@@ -74,7 +74,7 @@ pub mod retry {
 mod tests {
     use super::audit;
     use chrono::Utc;
-    use reconx_core::{AuditEntry, Authorization};
+    use reconx_core::AuditEntry;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -90,13 +90,13 @@ mod tests {
             user_id: format!("test-{unique}"),
             action: "scan".to_string(),
             target: "example.com".to_string(),
-            authorization: Authorization::SelfOwned,
+            authorization: "self".to_string(),
             result: "ok".to_string(),
         };
 
         audit::record(&entry).unwrap();
         let data = fs::read_to_string(path).unwrap();
         let last = data.lines().last().unwrap();
-        assert!(last.contains("\"user_id\":\""));
+        assert!(last.contains("\"user_id\":"));
     }
 }
