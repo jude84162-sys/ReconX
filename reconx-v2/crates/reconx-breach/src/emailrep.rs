@@ -3,7 +3,7 @@ use reconx_core::{ReconError, Result};
 use serde::Deserialize;
 use std::time::Duration;
 
-use crate::{ReputationInfo, BreachEntry};
+use crate::ReputationInfo;
 
 #[derive(Debug, Deserialize, Default)]
 struct EmailRepResponse {
