@@ -1,0 +1,17 @@
+[package]
+name = "reconx"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+reconx-core = { path = "../reconx-core" }
+reconx-common = { path = "../reconx-common" }
+reconx-breach = { path = "../reconx-breach" }
+tokio = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+csv = { workspace = true }
+colored = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+dotenv = { workspace = true }
