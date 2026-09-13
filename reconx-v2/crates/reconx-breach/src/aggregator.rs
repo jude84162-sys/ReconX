@@ -2,11 +2,7 @@
 #![allow(dead_code)]
 use chrono::Utc;
 
-
-use crate::{
-    breachdir, emailrep, gravatar, hibp, risk, BreachReport, GravatarInfo,
-    RiskLevel,
-};
+use crate::{breachdir, emailrep, gravatar, hibp, risk, BreachReport, GravatarInfo, RiskLevel};
 
 #[allow(clippy::manual_unwrap_or_default)]
 pub async fn scan_all(email: &str, timeout_secs: u64) -> BreachReport {
@@ -35,7 +31,8 @@ pub async fn scan_all(email: &str, timeout_secs: u64) -> BreachReport {
     }
 
     let total_breaches = merged.len() as u32;
-    let combined_confidence = merged.iter().map(|entry| entry.confidence).sum::<f32>() / merged.len().max(1) as f32;
+    let combined_confidence =
+        merged.iter().map(|entry| entry.confidence).sum::<f32>() / merged.len().max(1) as f32;
     let (risk_score, risk_level) = risk::score(&merged, reputation.as_ref());
     let adjusted = if !merged.is_empty() {
         risk_score.saturating_add((combined_confidence * 10.0) as u8)
@@ -47,7 +44,13 @@ pub async fn scan_all(email: &str, timeout_secs: u64) -> BreachReport {
         email: email.to_string(),
         scan_timestamp: Utc::now().to_rfc3339(),
         risk_score: adjusted.min(100),
-        risk_level: if adjusted >= 80 { RiskLevel::High } else if adjusted >= 35 { RiskLevel::Medium } else { RiskLevel::Low },
+        risk_level: if adjusted >= 80 {
+            RiskLevel::High
+        } else if adjusted >= 35 {
+            RiskLevel::Medium
+        } else {
+            RiskLevel::Low
+        },
         total_breaches,
         combined_confidence,
         breaches: merged,
