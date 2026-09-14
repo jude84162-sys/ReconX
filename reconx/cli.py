@@ -4,6 +4,9 @@ Usage:
     python -m reconx -u <username>       Username search across 250+ platforms
     python -m reconx -d <domain>         Domain intelligence
     python -m reconx -i <ip>             IP geolocation & profiling
+    python -m reconx username <username> Username search across platforms
+    python -m reconx domain <domain>     Domain intelligence
+    python -m reconx ip <ip>             IP geolocation & profiling
     python -m reconx -u <user> -o json   Export results as JSON
     python -m reconx --list              List available modules
 """
@@ -23,7 +26,31 @@ from reconx.utils.output import print_banner, print_info, print_error, print_war
 console = Console()
 
 
+def _add_common_arguments(parser):
+    """Add options shared by legacy and subcommand parsers."""
+    config_group = parser.add_argument_group("Configuration")
+    config_group.add_argument(
+        "-t", "--timeout", type=int, default=10, help="Request timeout in seconds (default: 10)"
+    )
+    config_group.add_argument(
+        "-w", "--workers", type=int, default=20, help="Number of concurrent threads (default: 20)"
+    )
+    config_group.add_argument("--verbose", action="store_true", help="Enable verbose output")
+
+    output_group = parser.add_argument_group("Output Options")
+    output_group.add_argument("-o", "--output", choices=["json", "csv", "txt"], help="Export results to file")
+    output_group.add_argument("-f", "--file", help="Output filename (default: reconx_results.<ext>)")
+    output_group.add_argument("--no-banner", action="store_true", help="Skip the banner display")
+    output_group.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress banner and non-essential output (for scripting)",
+    )
+    output_group.add_argument("--list", action="store_true", help="List all available modules")
+
+
 def create_parser():
+    """Create the backward-compatible flag-based parser."""
     parser = argparse.ArgumentParser(
         prog="reconx",
         description="ReconX - All-in-One OSINT Suite",
@@ -37,30 +64,40 @@ def create_parser():
     target_group.add_argument("-d", "--domain", help="Domain intelligence gathering")
     target_group.add_argument("-i", "--ip", help="IP geolocation and profiling")
 
-    # Configuration
-    config_group = parser.add_argument_group("Configuration")
-    config_group.add_argument("-t", "--timeout", type=int, default=10, help="Request timeout in seconds (default: 10)")
-    config_group.add_argument("-w", "--workers", type=int, default=20, help="Number of concurrent threads (default: 20)")
-    config_group.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    _add_common_arguments(parser)
 
-    # Output options
-    output_group = parser.add_argument_group("Output Options")
-    output_group.add_argument("-o", "--output", choices=["json", "csv", "txt"], help="Export results to file")
-    output_group.add_argument("-f", "--file", help="Output filename (default: reconx_results.<ext>)")
-    output_group.add_argument("--no-banner", action="store_true", help="Skip the banner display")
-    output_group.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Suppress banner and non-essential output (for scripting)",
+    return parser
+
+
+def create_subcommand_parser():
+    """Create the modern subcommand-based parser."""
+    parser = argparse.ArgumentParser(
+        prog="reconx",
+        description="ReconX - All-in-One OSINT Suite",
+        epilog="Example: reconx username johndoe -t 15 -w 30",
     )
-
-    # Info
+    parser.add_argument("-v", "--version", action="version", version=f"ReconX v{__version__}")
     parser.add_argument("--list", action="store_true", help="List all available modules")
+    subparsers = parser.add_subparsers(dest="command", required=True, title="Commands")
+
+    for command, help_text in (
+        ("username", "Search for a username across platforms"),
+        ("domain", "Domain intelligence gathering"),
+        ("ip", "IP geolocation and profiling"),
+    ):
+        command_parser = subparsers.add_parser(command, help=help_text, description=help_text)
+        command_parser.add_argument("target", help=f"{command} target")
+        _add_common_arguments(command_parser)
+
+    list_parser = subparsers.add_parser("list", help="List all available modules")
+    _add_common_arguments(list_parser)
+    list_parser.set_defaults(list=True)
 
     return parser
 
 
 def list_modules():
+    """Display the available ReconX modules."""
     from reconx.core.engine import Engine
     from reconx.modules.username import UsernameRecon
     from reconx.modules.domain import DomainRecon
@@ -121,9 +158,12 @@ def export_results(results, format_type, filename):
         console.print(f"[bold green]Results saved to {filename}[/bold green]")
 
 
-def main():
-    parser = create_parser()
-    args = parser.parse_args()
+def main(argv=None):
+    """Run ReconX using legacy flags or modern subcommands."""
+    argv = sys.argv[1:] if argv is None else argv
+    subcommand_mode = bool(argv and not argv[0].startswith("-"))
+    parser = create_subcommand_parser() if subcommand_mode else create_parser()
+    args = parser.parse_args(argv)
 
     if args.quiet:
         args.no_banner = True
@@ -139,25 +179,29 @@ def main():
         list_modules()
         return
 
-    # Determine target and module
-    target = None
-    module_name = None
-
-    if args.username:
-        target = args.username
-        module_name = "username"
-    elif args.domain:
-        target = args.domain
-        module_name = "domain"
-    elif args.ip:
-        target = args.ip
-        module_name = "ip"
+    if subcommand_mode:
+        target = args.target
+        module_name = args.command
     else:
-        parser.print_help()
-        sys.exit(1)
+        target = None
+        module_name = None
+
+        if args.username:
+            target = args.username
+            module_name = "username"
+        elif args.domain:
+            target = args.domain
+            module_name = "domain"
+        elif args.ip:
+            target = args.ip
+            module_name = "ip"
+        else:
+            parser.print_help()
+            sys.exit(1)
 
     # Import and run the appropriate module
     start_time = time.time()
+    module = None
 
     try:
         if module_name == "username":

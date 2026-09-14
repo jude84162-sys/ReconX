@@ -2,6 +2,12 @@
 
 All notable changes to ReconX will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Added modern `username`, `domain`, `ip`, and `list` CLI subcommands.
+- Preserved the existing flag-based CLI syntax for backward compatibility.
+
 ## [1.2.0] - 2026-09-14 (Python v1)
 
 ### Added

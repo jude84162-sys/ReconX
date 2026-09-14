@@ -5,11 +5,22 @@ import json
 import os
 import tempfile
 from unittest.mock import patch
-from reconx.cli import create_parser
+from reconx.cli import create_parser, create_subcommand_parser, main
 from reconx.modules.ip import _resolve_abuseipdb_api_key
 
 
 class TestCLI(unittest.TestCase):
+    def _assert_main_runs_module(self, argv, module_path, target, workers=False):
+        with patch("reconx.cli.print_banner"), patch(module_path) as module_class:
+            module_class.return_value.get_results.return_value = []
+            main(argv + ["--no-banner"])
+
+        module_class.assert_called_once_with(verbose=False, timeout=10)
+        if workers:
+            module_class.return_value.run.assert_called_once_with(target, workers=20)
+        else:
+            module_class.return_value.run.assert_called_once_with(target)
+
     def test_no_args_returns_none(self):
         parser = create_parser()
         args = parser.parse_args([])
@@ -96,6 +107,67 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.output, "csv")
         self.assertTrue(args.verbose)
         self.assertTrue(args.no_banner)
+
+    def test_username_subcommand(self):
+        parser = create_subcommand_parser()
+        args = parser.parse_args(["username", "testuser", "-t", "15", "-w", "30", "-o", "json"])
+        self.assertEqual(args.command, "username")
+        self.assertEqual(args.target, "testuser")
+        self.assertEqual(args.timeout, 15)
+        self.assertEqual(args.workers, 30)
+        self.assertEqual(args.output, "json")
+
+    def test_domain_subcommand(self):
+        parser = create_subcommand_parser()
+        args = parser.parse_args(["domain", "example.com"])
+        self.assertEqual(args.command, "domain")
+        self.assertEqual(args.target, "example.com")
+
+    def test_ip_subcommand(self):
+        parser = create_subcommand_parser()
+        args = parser.parse_args(["ip", "8.8.8.8"])
+        self.assertEqual(args.command, "ip")
+        self.assertEqual(args.target, "8.8.8.8")
+
+    @patch("reconx.cli.list_modules")
+    def test_list_subcommand(self, list_modules):
+        main(["list", "--no-banner"])
+        list_modules.assert_called_once_with()
+
+    @patch("reconx.cli.list_modules")
+    def test_list_subcommand_via_flag(self, list_modules):
+        main(["--list", "--no-banner"])
+        list_modules.assert_called_once_with()
+
+    def test_legacy_username_still_works(self):
+        self._assert_main_runs_module(
+            ["-u", "testuser"], "reconx.modules.username.UsernameRecon", "testuser", workers=True
+        )
+
+    def test_legacy_domain_still_works(self):
+        self._assert_main_runs_module(
+            ["-d", "example.com"], "reconx.modules.domain.DomainRecon", "example.com"
+        )
+
+    def test_legacy_ip_still_works(self):
+        self._assert_main_runs_module(
+            ["-i", "8.8.8.8"], "reconx.modules.ip.IPRecon", "8.8.8.8"
+        )
+
+    def test_username_subcommand_runs_module(self):
+        self._assert_main_runs_module(
+            ["username", "testuser"], "reconx.modules.username.UsernameRecon", "testuser", workers=True
+        )
+
+    def test_domain_subcommand_runs_module(self):
+        self._assert_main_runs_module(
+            ["domain", "example.com"], "reconx.modules.domain.DomainRecon", "example.com"
+        )
+
+    def test_ip_subcommand_runs_module(self):
+        self._assert_main_runs_module(
+            ["ip", "8.8.8.8"], "reconx.modules.ip.IPRecon", "8.8.8.8"
+        )
 
 
 class TestIPConfig(unittest.TestCase):

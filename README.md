@@ -65,6 +65,9 @@ pip install -e .
 # Run a username search
 reconx -u johndoe
 
+# Or use the modern subcommand syntax
+reconx username johndoe
+
 # Or using python module
 python -m reconx -u johndoe
 ```
@@ -72,15 +75,14 @@ python -m reconx -u johndoe
 ## 📖 Usage
 
 ```
-usage: reconx [-h] [-v] [-u USERNAME] [-e EMAIL] [-d DOMAIN] [-i IP]
+usage: reconx [-h] [-v] [-u USERNAME] [-d DOMAIN] [-i IP]
                [-t TIMEOUT] [-w WORKERS] [--verbose] [-o {json,csv,txt}]
-               [-f FILE] [--no-banner] [--list]
+               [-f FILE] [--no-banner] [--quiet] [--list]
 
 ReconX - All-in-One OSINT Suite
 
 Target Options:
   -u, --username   Search for a username across platforms
-  -e, --email      Email address reconnaissance
   -d, --domain     Domain intelligence gathering
   -i, --ip         IP geolocation and profiling
 
@@ -95,6 +97,21 @@ Output Options:
   --no-banner, --quiet
                    Skip the banner display
   --list           List all available modules
+```
+
+Both legacy flags and subcommands are supported:
+
+```bash
+# Legacy syntax
+reconx -u johndoe
+reconx -d example.com
+reconx -i 8.8.8.8
+
+# Modern syntax
+reconx username johndoe
+reconx domain example.com
+reconx ip 8.8.8.8
+reconx list
 ```
 
 ## 🎯 Examples
@@ -112,6 +129,9 @@ reconx -u johndoe -o json -f results.json
 
 # Export to CSV
 reconx -u johndoe -o csv -f results.csv
+
+# The same search using a subcommand
+reconx username johndoe -t 15 -w 30 -o json
 ```
 
 ### Domain Intelligence
