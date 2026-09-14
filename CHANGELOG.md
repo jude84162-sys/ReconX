@@ -14,6 +14,11 @@ All notable changes to ReconX will be documented in this file.
 - Fedifinder, Fediverse Observer, and Fediverse OSINT modules.
 - Flag and subcommand interfaces for the new Fediverse tools.
 
+## [1.4.0]
+
+### Added
+- Masto, Inflact, and Osintgram integrations with legal-use disclaimers.
+
 ## [1.2.0] - 2026-09-14 (Python v1)
 
 ### Added

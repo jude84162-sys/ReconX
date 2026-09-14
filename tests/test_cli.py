@@ -149,6 +149,17 @@ class TestCLI(unittest.TestCase):
         )
         self.assertEqual(parser.parse_args(["--fediverse-osint", "johndoe"]).fediverse_osint, "johndoe")
 
+    def test_instagram_subcommands(self):
+        parser = create_subcommand_parser()
+        for command in ("masto", "inflact", "osintgram"):
+            self.assertEqual(parser.parse_args([command, "johndoe"]).command, command)
+
+    def test_instagram_legacy_flags(self):
+        parser = create_parser()
+        self.assertEqual(parser.parse_args(["--masto", "@jane@example.com"]).masto, "@jane@example.com")
+        self.assertEqual(parser.parse_args(["--inflact", "jane"]).inflact, "jane")
+        self.assertEqual(parser.parse_args(["--osintgram", "jane"]).osintgram, "jane")
+
     @patch("reconx.cli.list_modules")
     def test_list_subcommand(self, list_modules):
         main(["list", "--no-banner"])

@@ -178,5 +178,31 @@ class TestFediverseModules(unittest.TestCase):
         self.assertEqual(len(result["accounts"]), 1)
 
 
+class TestInstagramModules(unittest.TestCase):
+    @patch("reconx.modules.masto.shutil.which", return_value=None)
+    def test_masto_missing_cli(self, which):
+        from reconx.modules.masto import MastoModule
+        self.assertEqual(MastoModule().run("@jane@example.com")["error"], "Install: npm i -g masto")
+
+    @patch("reconx.modules.osintgram.os.environ", {})
+    def test_osintgram_missing_path(self):
+        from reconx.modules.osintgram import OsintgramModule
+        self.assertEqual(OsintgramModule().run("jane")["error"], "Set OSINTGRAM_PATH env var")
+
+    @patch("reconx.modules.inflact.time.sleep")
+    @patch("reconx.modules.inflact.RobotFileParser")
+    @patch("reconx.modules.inflact.requests.get")
+    def test_inflact_profile(self, get, robot, sleep):
+        robot.return_value.can_fetch.return_value = True
+        response = Mock()
+        response.text = '<span class="full_name">Jane Doe</span>'
+        response.raise_for_status.return_value = None
+        get.return_value = response
+        from reconx.modules.inflact import InflactModule
+        result = InflactModule().run("jane")
+        self.assertEqual(result["profile_data"]["full_name"], "Jane Doe")
+        sleep.assert_called_once_with(5)
+
+
 if __name__ == "__main__":
     unittest.main()

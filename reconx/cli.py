@@ -66,6 +66,9 @@ def create_parser():
     target_group.add_argument("--fedifinder", metavar="TARGET", help="Find Fediverse accounts")
     target_group.add_argument("--fediverse-observer", metavar="INSTANCE", help="Inspect a Fediverse instance")
     target_group.add_argument("--fediverse-osint", metavar="USERNAME", help="Search Fediverse instances")
+    target_group.add_argument("--masto", metavar="HANDLE", help="Look up a Mastodon account")
+    target_group.add_argument("--inflact", metavar="USERNAME", help="Fetch a public Inflact profile")
+    target_group.add_argument("--osintgram", metavar="USERNAME", help="Run an Osintgram command")
 
     _add_common_arguments(parser)
 
@@ -90,6 +93,9 @@ def create_subcommand_parser():
         ("fedifinder", "Find Fediverse accounts"),
         ("fediverse-observer", "Inspect a Fediverse instance"),
         ("fediverse-osint", "Search Fediverse instances"),
+        ("masto", "Look up a Mastodon account"),
+        ("inflact", "Fetch a public Inflact profile"),
+        ("osintgram", "Run an external Osintgram command"),
     ):
         command_parser = subparsers.add_parser(command, help=help_text, description=help_text)
         command_parser.add_argument("target", help=f"{command} target")
@@ -127,6 +133,9 @@ def list_modules():
         ("fedifinder", "Find Fediverse accounts", "--fedifinder <target>"),
         ("fediverse-observer", "Inspect a Fediverse instance", "--fediverse-observer <instance>"),
         ("fediverse-osint", "Search Fediverse instances", "--fediverse-osint <username>"),
+        ("masto", "Look up a Mastodon account", "--masto <handle>"),
+        ("inflact", "Fetch a public Inflact profile", "--inflact <username>"),
+        ("osintgram", "Run an Osintgram command", "--osintgram <username>"),
     ]
     for name, desc, flag in modules_info:
         table.add_row(name, desc, flag)
@@ -204,6 +213,15 @@ def main(argv=None):
         elif getattr(args, "fediverse_osint", None):
             target = args.fediverse_osint
             module_name = "fediverse-osint"
+        elif getattr(args, "masto", None):
+            target = args.masto
+            module_name = "masto"
+        elif getattr(args, "inflact", None):
+            target = args.inflact
+            module_name = "inflact"
+        elif getattr(args, "osintgram", None):
+            target = args.osintgram
+            module_name = "osintgram"
         elif args.username:
             target = args.username
             module_name = "username"
@@ -248,6 +266,18 @@ def main(argv=None):
             from reconx.modules.fediverse_osint import FediverseOsintModule
             module = FediverseOsintModule()
             results = module.run(target, timeout=args.timeout)
+        elif module_name == "masto":
+            from reconx.modules.masto import MastoModule
+            module = MastoModule()
+            results = module.run(target, timeout=30)
+        elif module_name == "inflact":
+            from reconx.modules.inflact import InflactModule
+            module = InflactModule()
+            results = module.run(target, timeout=15)
+        elif module_name == "osintgram":
+            from reconx.modules.osintgram import OsintgramModule
+            module = OsintgramModule()
+            results = module.run(target, timeout=120)
 
     except KeyboardInterrupt:
         print_warning("\nScan interrupted by user")
