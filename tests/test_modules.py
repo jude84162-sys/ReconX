@@ -3,6 +3,7 @@
 import unittest
 import json
 import ast
+from unittest.mock import Mock, patch
 
 
 class TestUsernameModule(unittest.TestCase):
@@ -140,6 +141,41 @@ class TestHTTPUtils(unittest.TestCase):
         from reconx.utils.http import reverse_dns
         result = reverse_dns("192.0.2.1")
         self.assertIsNone(result)
+
+
+class TestFediverseModules(unittest.TestCase):
+    def _response(self, payload=None, text=""):
+        response = Mock()
+        response.ok = True
+        response.text = text
+        response.json.return_value = payload or {}
+        return response
+
+    @patch("reconx.modules.fedifinder.safe_request")
+    def test_fedifinder_rel_me(self, request):
+        request.return_value = self._response(
+            text='<a rel="me" href="https://social.example/@jane">profile</a>'
+        )
+        from reconx.modules.fedifinder import FedifinderModule
+        result = FedifinderModule().run("example.com")
+        self.assertEqual(result["accounts"][0]["source"], "rel-me")
+
+    @patch("reconx.modules.fediverse_observer.safe_request")
+    def test_fediverse_observer(self, request):
+        request.return_value = self._response({"software": "Mastodon", "version": "4.0", "users": 4})
+        from reconx.modules.fediverse_observer import FediverseObserverModule
+        result = FediverseObserverModule().run("mastodon.social")
+        self.assertEqual(result["software"], "Mastodon")
+        self.assertEqual(result["users"], 4)
+
+    @patch("reconx.modules.fediverse_osint.safe_request")
+    def test_fediverse_osint_deduplicates(self, request):
+        request.return_value = self._response(
+            {"accounts": [{"acct": "jane@mastodon.social", "url": "https://mastodon.social/@jane"}]}
+        )
+        from reconx.modules.fediverse_osint import FediverseOsintModule
+        result = FediverseOsintModule().run("jane")
+        self.assertEqual(len(result["accounts"]), 1)
 
 
 if __name__ == "__main__":

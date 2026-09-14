@@ -63,6 +63,9 @@ def create_parser():
     target_group.add_argument("-u", "--username", help="Search for a username across platforms")
     target_group.add_argument("-d", "--domain", help="Domain intelligence gathering")
     target_group.add_argument("-i", "--ip", help="IP geolocation and profiling")
+    target_group.add_argument("--fedifinder", metavar="TARGET", help="Find Fediverse accounts")
+    target_group.add_argument("--fediverse-observer", metavar="INSTANCE", help="Inspect a Fediverse instance")
+    target_group.add_argument("--fediverse-osint", metavar="USERNAME", help="Search Fediverse instances")
 
     _add_common_arguments(parser)
 
@@ -84,6 +87,9 @@ def create_subcommand_parser():
         ("username", "Search for a username across platforms"),
         ("domain", "Domain intelligence gathering"),
         ("ip", "IP geolocation and profiling"),
+        ("fedifinder", "Find Fediverse accounts"),
+        ("fediverse-observer", "Inspect a Fediverse instance"),
+        ("fediverse-osint", "Search Fediverse instances"),
     ):
         command_parser = subparsers.add_parser(command, help=help_text, description=help_text)
         command_parser.add_argument("target", help=f"{command} target")
@@ -118,6 +124,9 @@ def list_modules():
         ("username", "Search username across 250+ platforms", "-u <username>"),
         ("domain", "DNS, WHOIS, subdomain enumeration, tech detect", "-d <domain>"),
         ("ip", "Geolocation, ASN, reverse DNS, port scan", "-i <ip>"),
+        ("fedifinder", "Find Fediverse accounts", "--fedifinder <target>"),
+        ("fediverse-observer", "Inspect a Fediverse instance", "--fediverse-observer <instance>"),
+        ("fediverse-osint", "Search Fediverse instances", "--fediverse-osint <username>"),
     ]
     for name, desc, flag in modules_info:
         table.add_row(name, desc, flag)
@@ -186,7 +195,16 @@ def main(argv=None):
         target = None
         module_name = None
 
-        if args.username:
+        if getattr(args, "fedifinder", None):
+            target = args.fedifinder
+            module_name = "fedifinder"
+        elif getattr(args, "fediverse_observer", None):
+            target = args.fediverse_observer
+            module_name = "fediverse-observer"
+        elif getattr(args, "fediverse_osint", None):
+            target = args.fediverse_osint
+            module_name = "fediverse-osint"
+        elif args.username:
             target = args.username
             module_name = "username"
         elif args.domain:
@@ -218,6 +236,18 @@ def main(argv=None):
             from reconx.modules.ip import IPRecon
             module = IPRecon(verbose=args.verbose, timeout=args.timeout)
             module.run(target)
+        elif module_name == "fedifinder":
+            from reconx.modules.fedifinder import FedifinderModule
+            module = FedifinderModule()
+            results = module.run(target, timeout=args.timeout)
+        elif module_name == "fediverse-observer":
+            from reconx.modules.fediverse_observer import FediverseObserverModule
+            module = FediverseObserverModule()
+            results = module.run(target, timeout=args.timeout)
+        elif module_name == "fediverse-osint":
+            from reconx.modules.fediverse_osint import FediverseOsintModule
+            module = FediverseOsintModule()
+            results = module.run(target, timeout=args.timeout)
 
     except KeyboardInterrupt:
         print_warning("\nScan interrupted by user")
@@ -235,7 +265,7 @@ def main(argv=None):
 
     # Export results if requested
     if args.output and module:
-        export_results(module.get_results(), args.output, args.file)
+        export_results(module.get_results() if hasattr(module, "get_results") else results, args.output, args.file)
 
 
 if __name__ == "__main__":

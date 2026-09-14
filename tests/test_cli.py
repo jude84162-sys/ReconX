@@ -129,6 +129,26 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.command, "ip")
         self.assertEqual(args.target, "8.8.8.8")
 
+    def test_fediverse_subcommands(self):
+        parser = create_subcommand_parser()
+        for command, target in (
+            ("fedifinder", "example.com"),
+            ("fediverse-observer", "mastodon.social"),
+            ("fediverse-osint", "johndoe"),
+        ):
+            args = parser.parse_args([command, target])
+            self.assertEqual(args.command, command)
+            self.assertEqual(args.target, target)
+
+    def test_fediverse_legacy_flags(self):
+        parser = create_parser()
+        self.assertEqual(parser.parse_args(["--fedifinder", "example.com"]).fedifinder, "example.com")
+        self.assertEqual(
+            parser.parse_args(["--fediverse-observer", "mastodon.social"]).fediverse_observer,
+            "mastodon.social",
+        )
+        self.assertEqual(parser.parse_args(["--fediverse-osint", "johndoe"]).fediverse_osint, "johndoe")
+
     @patch("reconx.cli.list_modules")
     def test_list_subcommand(self, list_modules):
         main(["list", "--no-banner"])

@@ -22,7 +22,7 @@ def print_banner():
    ██║     ██║   ██║██╔══██╗██╔══╝
    ╚██████╗╚██████╔╝██║  ██║███████╗
     ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝[/bold cyan]
-    [bold yellow]All-in-One OSINT Suite v1.2.0[/bold yellow]
+    [bold yellow]All-in-One OSINT Suite v1.3.0[/bold yellow]
     [dim]By jude84162-sys | github.com/jude84162-sys[/dim]
 """
     console.print(banner)

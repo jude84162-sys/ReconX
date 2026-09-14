@@ -28,6 +28,7 @@ and IP geolocation — all from a single, elegant CLI.
 | 🔍 **Username Search** | Hunt a username across **500+ social media platforms**, gaming sites, dev platforms, dating apps, Fediverse, and more |
 | 🌐 **Domain Intel** | DNS enumeration, WHOIS lookup, **150+ subdomain brute-force**, tech detection, security headers |
 | 📍 **IP Profiling** | Geolocation, ASN/BGP info, reverse DNS, **22 common port scan**, threat intel (OTX) |
+| 🐘 **Fediverse Tools** | Discover `rel="me"` profiles, inspect instances, and search Mastodon accounts |
 
 ### Username Module Covers 500+ Platforms:
 - **Social Media**: Twitter/X, Instagram, Facebook, TikTok, LinkedIn, Reddit, Threads, Bluesky, Mastodon (15+ instances), Truth Social, Parler, Gab, VK, Cohost, Post.news, and more
@@ -112,7 +113,13 @@ reconx username johndoe
 reconx domain example.com
 reconx ip 8.8.8.8
 reconx list
+reconx fedifinder example.com
+reconx fediverse-observer mastodon.social
+reconx fediverse-osint johndoe
 ```
+
+Fediverse tools are also available as legacy flags: `--fedifinder`, `--fediverse-observer`,
+and `--fediverse-osint`.
 
 ## 🎯 Examples
 

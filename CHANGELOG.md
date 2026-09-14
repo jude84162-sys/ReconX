@@ -8,6 +8,12 @@ All notable changes to ReconX will be documented in this file.
 - Added modern `username`, `domain`, `ip`, and `list` CLI subcommands.
 - Preserved the existing flag-based CLI syntax for backward compatibility.
 
+## [1.3.0]
+
+### Added
+- Fedifinder, Fediverse Observer, and Fediverse OSINT modules.
+- Flag and subcommand interfaces for the new Fediverse tools.
+
 ## [1.2.0] - 2026-09-14 (Python v1)
 
 ### Added
