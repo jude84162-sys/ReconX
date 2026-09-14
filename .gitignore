@@ -47,3 +47,12 @@ reconx_results.*
 .pytest_cache/
 .coverage
 htmlcov/
+# Allow Next.js/Node package files
+!package.json
+!package-lock.json
+!tsconfig.json
+!vercel.json
+!components.json
+!**/package.json
+!**/package-lock.json
+!**/tsconfig.json
