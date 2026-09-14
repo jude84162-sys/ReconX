@@ -1,8 +1,7 @@
 """ReconX CLI - All-in-One OSINT Suite
 
 Usage:
-    python -m reconx -u <username>       Username search across 100+ platforms
-    python -m reconx -e <email>          Email reconnaissance
+    python -m reconx -u <username>       Username search across 250+ platforms
     python -m reconx -d <domain>         Domain intelligence
     python -m reconx -i <ip>             IP geolocation & profiling
     python -m reconx -u <user> -o json   Export results as JSON
@@ -35,7 +34,6 @@ def create_parser():
     # Target type arguments
     target_group = parser.add_argument_group("Target Options")
     target_group.add_argument("-u", "--username", help="Search for a username across platforms")
-    target_group.add_argument("-e", "--email", help="Email address reconnaissance")
     target_group.add_argument("-d", "--domain", help="Domain intelligence gathering")
     target_group.add_argument("-i", "--ip", help="IP geolocation and profiling")
 
@@ -65,13 +63,11 @@ def create_parser():
 def list_modules():
     from reconx.core.engine import Engine
     from reconx.modules.username import UsernameRecon
-    from reconx.modules.email import EmailRecon
     from reconx.modules.domain import DomainRecon
     from reconx.modules.ip import IPRecon
 
     engine = Engine()
     engine.register(UsernameRecon)
-    engine.register(EmailRecon)
     engine.register(DomainRecon)
     engine.register(IPRecon)
 
@@ -82,8 +78,7 @@ def list_modules():
     table.add_column("Flag", style="yellow")
 
     modules_info = [
-        ("username", "Search username across 100+ platforms", "-u <username>"),
-        ("email", "Email breach checks, domain info, Gravatar", "-e <email>"),
+        ("username", "Search username across 250+ platforms", "-u <username>"),
         ("domain", "DNS, WHOIS, subdomain enumeration, tech detect", "-d <domain>"),
         ("ip", "Geolocation, ASN, reverse DNS, port scan", "-i <ip>"),
     ]
@@ -151,9 +146,6 @@ def main():
     if args.username:
         target = args.username
         module_name = "username"
-    elif args.email:
-        target = args.email
-        module_name = "email"
     elif args.domain:
         target = args.domain
         module_name = "domain"
@@ -172,11 +164,6 @@ def main():
             from reconx.modules.username import UsernameRecon
             module = UsernameRecon(verbose=args.verbose, timeout=args.timeout)
             module.run(target, workers=args.workers)
-
-        elif module_name == "email":
-            from reconx.modules.email import EmailRecon
-            module = EmailRecon(verbose=args.verbose, timeout=args.timeout)
-            module.run(target)
 
         elif module_name == "domain":
             from reconx.modules.domain import DomainRecon

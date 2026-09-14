@@ -12,8 +12,10 @@
 
 ReconX is a comprehensive open-source intelligence (OSINT) framework that
 gathers information from publicly available sources. It features username
-hunting across **250+ platforms**, email reconnaissance, domain intelligence,
+hunting across **250+ platforms**, domain intelligence,
 and IP geolocation — all from a single, elegant CLI.
+
+> **Note:** Email reconnaissance has been moved to ReconX v2 (Rust) for improved performance and capabilities.
 
 </div>
 
@@ -24,7 +26,6 @@ and IP geolocation — all from a single, elegant CLI.
 | Module | Description |
 |--------|-------------|
 | 🔍 **Username Search** | Hunt a username across **250+ social media platforms**, gaming sites, dev platforms, dating apps, and more |
-| 📧 **Email Recon** | Check breaches (HIBP), Gravatar profiles, domain DNS/SPF/DMARC records |
 | 🌐 **Domain Intel** | DNS enumeration, WHOIS lookup, **150+ subdomain brute-force**, tech detection, security headers |
 | 📍 **IP Profiling** | Geolocation, ASN/BGP info, reverse DNS, **22 common port scan**, threat intel (OTX) |
 
@@ -42,6 +43,7 @@ and IP geolocation — all from a single, elegant CLI.
 - **Dating**: OkCupid, Tinder, Bumble, Hinge, MeetMe, Tagged, Badoo, POF, Zoosk
 - **And many more...**
 
+> 📧 **Email Reconnaissance**: Now available in ReconX v2 (Rust) — see [reconx-v2/](reconx-v2/)
 ## 🚀 Quick Start
 
 ```bash
@@ -105,11 +107,6 @@ reconx -u johndoe -o json -f results.json
 reconx -u johndoe -o csv -f results.csv
 ```
 
-### Email Reconnaissance
-```bash
-reconx -e user@example.com
-```
-
 ### Domain Intelligence
 ```bash
 reconx -d example.com
@@ -155,7 +152,6 @@ ReconX/
 │   │   └── engine.py        # Module base class & engine
 │   ├── modules/
 │   │   ├── username.py      # Username recon (250+ sites)
-│   │   ├── email.py         # Email recon
 │   │   ├── domain.py        # Domain intel
 │   │   └── ip.py            # IP profiling
 │   └── utils/
@@ -180,7 +176,7 @@ ReconX/
 | `rich` | Beautiful terminal output |
 | `dnspython` | Advanced DNS lookups |
 | `python-whois` | WHOIS lookups |
-
+| `beautifulsoup4` | HTML parsing for new modules |
 ## 🧪 Development
 
 ```bash

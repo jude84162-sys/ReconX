@@ -72,22 +72,6 @@ class TestUsernameModule(unittest.TestCase):
         self.assertIsInstance(m.description, str)
 
 
-class TestEmailModule(unittest.TestCase):
-    """Test the email module."""
-
-    def test_email_recon_class_exists(self):
-        from reconx.modules.email import EmailRecon
-        m = EmailRecon(verbose=False, timeout=5)
-        self.assertEqual(m.name, "email")
-
-    def test_email_recon_valid_email(self):
-        from reconx.modules.email import EmailRecon
-        m = EmailRecon(verbose=False, timeout=5)
-        # Just test that it doesn't crash - we won't actually run it
-        # to avoid external API calls in CI
-        self.assertIsNotNone(m)
-
-
 class TestDomainModule(unittest.TestCase):
     """Test the domain module."""
 
