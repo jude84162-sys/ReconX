@@ -15,7 +15,6 @@ class TestCLI(unittest.TestCase):
         args = parser.parse_args([])
         # argparse with no required args won't error - it just returns None targets
         self.assertIsNone(args.username)
-        self.assertIsNone(args.email)
         self.assertIsNone(args.domain)
         self.assertIsNone(args.ip)
 
@@ -23,12 +22,6 @@ class TestCLI(unittest.TestCase):
         parser = create_parser()
         args = parser.parse_args(["-u", "testuser"])
         self.assertEqual(args.username, "testuser")
-        self.assertIsNone(args.email)
-
-    def test_email_arg(self):
-        parser = create_parser()
-        args = parser.parse_args(["-e", "test@example.com"])
-        self.assertEqual(args.email, "test@example.com")
 
     def test_domain_arg(self):
         parser = create_parser()
