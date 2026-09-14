@@ -103,120 +103,17 @@ reconx username johndoe
 reconx domain example.com
 reconx ip 8.8.8.8
 reconx list
-reconx fedifinder example.com
-reconx fediverse-observer mastodon.social
-reconx fediverse-osint johndoe
-reconx masto @user@instance
-reconx inflact johndoe
-reconx osintgram johndoe
-
-Fediverse tools are also available as legacy flags: --fedifinder, --fediverse-observer,
-and --fediverse-osint.
-LEGAL
-Use these tools only against targets you own or have written authorization to assess.
-Instagram scraping may violate Instagram Terms of Service. Users are responsible for
-compliance with applicable laws, including CFAA and GDPR.
-🎯 Examples
-Username Search
-# Basic search
-reconx -u johndoe
-
-# With more threads (faster)
-reconx -u johndoe -w 50
-
-# Export to JSON
-reconx -u johndoe -o json -f results.json
-
-# Export to CSV
-reconx -u johndoe -o csv -f results.csv
-
-# The same search using a subcommand
-reconx username johndoe -t 15 -w 30 -o json
-
-Domain Intelligence
-reconx -d example.com
-reconx -d example.com -o json -f domain_report.json
-
-IP Profiling
-reconx -i 8.8.8.8
-reconx -i 1.1.1.1 -o csv -f ip_report.csv
-
-Configuring API Keys
-For enhanced threat intelligence (AbuseIPDB), set the API key as an environment variable:
-# Linux/macOS
-export ABUSEIPDB_API_KEY="your_api_key_here"
-
-# Windows PowerShell
-$env:ABUSEIPDB_API_KEY="your_api_key_here"
-
-# Or create a config.json file (see config.json.example)
-
-List Modules
-reconx --list
-
-🏗 Project Structure
-ReconX/
-├── .github/workflows/
-│   ├── ci.yml              # CI: lint, test (3.8-3.12), security scan, smoke test
-│   └── release.yml         # CD: auto-publish to PyPI on release
-├── reconx/
-│   ├── __init__.py          # Package init
-│   ├── __main__.py          # Entry point
-│   ├── cli.py               # CLI argument parser
-│   ├── core/
-│   │   └── engine.py        # Module base class & engine
-│   ├── modules/
-│   │   ├── username.py      # Username recon (250+ sites)
-│   │   ├── domain.py        # Domain intel
-│   │   └── ip.py            # IP profiling
-│   └── utils/
-│       ├── http.py          # HTTP helpers
-│       └── output.py        # Rich console output
-├── tests/
-│   ├── test_engine.py       # Core engine tests
-│   ├── test_modules.py      # Module validation tests
-│   └── test_cli.py          # CLI & export tests
-├── setup.py                  # Package configuration
-├── pyproject.toml            # Modern Python project config
-├── requirements.txt
-├── LICENSE
-└── README.md
-
-📦 Dependencies
-| Package | Purpose |
-|---|---|
-| requests | HTTP requests |
-| rich | Beautiful terminal output |
-| dnspython | Advanced DNS lookups |
-| python-whois | WHOIS lookups |
-| beautifulsoup4 | HTML parsing for new modules |
-🧪 Development
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/ -v
-
-# Run tests with coverage
-pytest tests/ -v --cov=reconx
-
-# Lint
-flake8 reconx/ tests/ --max-line-length=120
-black --check --line-length=120 reconx/ tests/
 
 ⚠️ Disclaimer
- ReconXReconX is intended for educational
-purposes and authorized security
-testing only.
-The authors assume no liability and are not responsible for any misuse or
-damage
-caused by this program. Always ensure you have proper authorization before conducting reconnaissance on any target.
+​ReconX is intended for educational purposes and authorized security testing only.
+The authors assume no liability and are not responsible for any misuse or damage
+caused by this program. Always ensure you have proper authorization before
+conducting reconnaissance on any target.
 
+​🤝 Contributing
+​Contributions are welcome! Feel free to open a Pull Request.
 
- * Open a Pull Request
-📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
-<div align="center">
+​📄 License
+​This project is licensed under the MIT License - see the LICENSE file for details.
 Made with ❤️ by jude84162-sys
-</div>
 
