@@ -65,6 +65,7 @@
 
     reconx-v2/
     ├── Cargo.toml                 # Workspace
+    ├── web/                       # Next.js 14 + Clerk dashboard (Phase 7)
     ├── Dockerfile                 # Multi-stage build
     ├── crates/
     │   ├── reconx-core/          # Types, errors, traits, auth
@@ -117,6 +118,18 @@ Create `reconx-v2/.env`:
     cargo test --all
     cargo build --release
 
+### Web dashboard
+
+The Phase 7 dashboard lives in `web/` and provides a dark Next.js 14 + Clerk
+UI shell with protected dashboard and scan routes. It currently uses mock API
+responses; Rust API integration is planned for Phase 8.
+
+    cd web
+    Copy-Item .env.local.example .env.local
+    # Add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY
+    npm install
+    npm run dev
+
 Full check:
 
     cargo fmt --all -- --check && \
@@ -133,7 +146,7 @@ Full check:
 - [ ] **v0.4.0** — Image EXIF + pHash
 - [ ] **v0.5.0** — Phone number recon
 - [ ] **v0.6.0** — Gmail-specific intel
-- [ ] **v0.7.0** — Web dashboard
+- [x] **Phase 7** — Web dashboard UI and Clerk auth shell
 
 See [root README](../README.md) for v1 (Python) docs.
 
