@@ -6,13 +6,13 @@
 
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/Platforms-250%2B-orange.svg)]()
+[![Platforms](https://img.shields.io/badge/Platforms-500%2B-orange.svg)]()
 [![Tests](https://github.com/jude84162-sys/ReconX/actions/workflows/ci.yml/badge.svg)](https://github.com/jude84162-sys/ReconX/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
 
 ReconX is a comprehensive open-source intelligence (OSINT) framework that
 gathers information from publicly available sources. It features username
-hunting across **250+ platforms**, domain intelligence,
+hunting across **500+ platforms**, domain intelligence,
 and IP geolocation — all from a single, elegant CLI.
 
 > **Note:** Email reconnaissance has been moved to ReconX v2 (Rust) for improved performance and capabilities.
@@ -25,23 +25,30 @@ and IP geolocation — all from a single, elegant CLI.
 
 | Module | Description |
 |--------|-------------|
-| 🔍 **Username Search** | Hunt a username across **250+ social media platforms**, gaming sites, dev platforms, dating apps, and more |
+| 🔍 **Username Search** | Hunt a username across **500+ social media platforms**, gaming sites, dev platforms, dating apps, Fediverse, and more |
 | 🌐 **Domain Intel** | DNS enumeration, WHOIS lookup, **150+ subdomain brute-force**, tech detection, security headers |
 | 📍 **IP Profiling** | Geolocation, ASN/BGP info, reverse DNS, **22 common port scan**, threat intel (OTX) |
 
-### Username Module Covers:
-- **Social Media**: Twitter/X, Instagram, Facebook, TikTok, LinkedIn, Reddit, Threads, Bluesky, Mastodon, Truth Social, Parler, Gab, VK, and more
-- **Developer**: GitHub, GitLab, Codeberg, SourceHut, Stack Overflow, HackerRank, LeetCode, Codeforces, Codewars, Dev.to, Replit, CodePen
-- **Gaming**: Steam, Xbox, PSN, Roblox, Minecraft, Osu!, Chess.com, Faceit, Epic Games, Tetrio, Speedrun.com
-- **Art & Design**: ArtStation, Behance, Dribbble, Figma, Canva, Unsplash, 500px, Pixiv, DeviantArt, Sketchfab
-- **Music & Video**: YouTube, Twitch, Spotify, SoundCloud, Vimeo, Dailymotion, Bandcamp, Rate Your Music, Discogs
-- **Link-in-Bio**: Linktree, Carrd, Bento.me, Solo.to, Milkshake, Beacons, Lnk.Bio, Stan Store
-- **Finance**: PayPal, Venmo, Cash.app, Wise, Monzo, Revolut, Liberapay, Patreon, BuyMeACoffee
-- **Education**: LeetCode, Coursera, Udemy, Khan Academy, Duolingo, freeCodeCamp, Codecademy, Brilliant, TED
-- **Cybersecurity**: HackerOne, Bugcrowd, Hack The Box, TryHackMe, Shodan, VirusTotal, Censys
-- **Asian Platforms**: Bilibili, Douyin, Zhihu, Weibo, VK, OK.ru, LINE, Naver, Xing
-- **Dating**: OkCupid, Tinder, Bumble, Hinge, MeetMe, Tagged, Badoo, POF, Zoosk
-- **And many more...**
+### Username Module Covers 500+ Platforms:
+- **Social Media**: Twitter/X, Instagram, Facebook, TikTok, LinkedIn, Reddit, Threads, Bluesky, Mastodon (15+ instances), Truth Social, Parler, Gab, VK, Cohost, Post.news, and more
+- **Developer**: GitHub, GitLab, Codeberg, SourceHut, Stack Overflow, HackerRank, LeetCode, Codeforces, Codewars, Dev.to, Replit, CodePen, Observable, ShaderToy, Arduino, Raspberry Pi, and more
+- **Gaming**: Steam, Xbox, PSN, Roblox, Minecraft, Osu!, Chess.com, Faceit, Epic Games, Battle.net, Ubisoft, Rockstar, GOG, itch.io, Speedrun.com, BoardGameGeek, and more
+- **Art & Design**: ArtStation, Behance, Dribbble, Figma, Canva, Unsplash, 500px, Pixiv, DeviantArt, Sketchfab, ViewBug, GuruShots, EyeEm, VSCO, SmugMug, and more
+- **Music & Video**: YouTube, Twitch, Spotify, SoundCloud, Vimeo, Dailymotion, Bandcamp, Rate Your Music, Discogs, Mixcloud, Audius, Audiomack, ReverbNation, Jamendo, Splice, and more
+- **Link-in-Bio**: Linktree, Carrd, Bento.me, Solo.to, Milkshake, Beacons, Lnk.Bio, Stan Store, HeyLink, Willlow, Taplink, and more
+- **Finance**: PayPal, Venmo, Cash.app, Wise, Monzo, Revolut, Liberapay, Patreon, BuyMeACoffee, Gumroad, Subscribestar, and more
+- **Education**: LeetCode, Coursera, Udemy, Khan Academy, Duolingo, freeCodeCamp, Codecademy, Brilliant, TED, EdX, Udacity, Pluralsight, Skillshare, FutureLearn, and more
+- **Research**: ResearchGate, Academia.edu, ORCID, Google Scholar, Semantic Scholar, arXiv, SSRN, Mendeley, and more
+- **Cybersecurity**: HackerOne, Bugcrowd, Hack The Box, TryHackMe, Shodan, VirusTotal, Censys, PentestIT, Exploit-DB, GreyNoise, and more
+- **Fediverse**: Mastodon.social, Mastodon.online, Fosstodon, Hachyderm, Pixelfed, PeerTube, Lemmy, Kbin, Misskey, Pleroma, WriteFreely, Bookwyrm, Friendica, Diaspora, Akkoma
+- **Crypto/NFT**: OpenSea, Rarible, Foundation, SuperRare, Zora, Mirror, ENS, Etherscan, Blockscout, Dune Analytics
+- **Asian Platforms**: Bilibili, Douyin, Zhihu, Weibo, WeChat, QQ, Xiaohongshu, Douban, Toutiao, Kuaishou, Naver, Daum, LINE, KakaoTalk, Mixi
+- **Dating**: OkCupid, Tinder, Bumble, Hinge, Coffee Meets Bagel, Match.com, eHarmony, EliteSingles, POF
+- **Sports/Fitness**: Strava, Nike Run Club, MapMyRun, Garmin Connect, Fitbit, Peloton, Whoop, Zwift, Komoot, AllTrails
+- **Podcasts**: Anchor, Buzzsprout, Podbean, Spreaker, Transistor, Simplecast, Podcast Index
+- **Productivity**: Notion, Coda, Airtable, Miro, Trello, Asana, Monday.com, Basecamp, Wrike, Toggl, Slack, Discord
+- **Hosting/Cloud**: GitHub Pages, GitLab Pages, Netlify, Vercel, Railway, Fly.io, Render, Cloudflare Pages, Glitch, Surge.sh, PythonAnywhere
+- **And 100+ more...**
 
 > 📧 **Email Reconnaissance**: Now available in ReconX v2 (Rust) — see [reconx-v2/](reconx-v2/)
 ## 🚀 Quick Start
