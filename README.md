@@ -205,17 +205,14 @@ flake8 reconx/ tests/ --max-line-length=120
 black --check --line-length=120 reconx/ tests/
 
 ⚠️ Disclaimer
-> ReconX is intended for educational purposes and authorized security testing only.
-> The authors assume no liability and are not responsible for any misuse or damage
-> caused by this program. Always ensure you have proper authorization before
-> conducting reconnaissance on any target.
-> 
-🤝 Contributing
-Contributions are welcome! Feel free to open a Pull Request.
- * Fork the repository
- * Create your feature branch (git checkout -b feature/amazing-feature)
- * Commit your changes (git commit -m 'Add amazing feature')
- * Push to the branch (git push origin feature/amazing-feature)
+ ReconXReconX is intended for educational
+purposes and authorized security
+testing only.
+The authors assume no liability and are not responsible for any misuse or
+damage
+caused by this program. Always ensure you have proper authorization before conducting reconnaissance on any target.
+
+
  * Open a Pull Request
 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
