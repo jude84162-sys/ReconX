@@ -13,7 +13,9 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const configuredKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const publishableKey =
+    configuredKey && !configuredKey.includes("replace_me") ? configuredKey : undefined;
   const content = (
     <>
       {publishableKey ? <Navbar /> : <PublicNavbar />}
