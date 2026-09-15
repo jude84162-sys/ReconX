@@ -40,14 +40,18 @@ hosting/cloud, and more — see `reconx/modules/username.py` for the full list.
 ## 🚀 Quick Start
 
 ```bash
-# Install from PyPI
-pip install reconx
-
-# Or install from a clone (editable)
+# Install from the repository (recommended)
 git clone https://github.com/jude84162-sys/ReconX.git
 cd ReconX
 pip install -e .
+
+# Or install straight from GitHub without cloning
+pip install git+https://github.com/jude84162-sys/ReconX.git
 ```
+
+> **Note:** ReconX is **not yet published to PyPI**. The `reconx` name on PyPI
+> is currently unregistered and does not belong to this project — do not
+> `pip install reconx` expecting this tool.
 
 ```bash
 # Modern subcommand syntax

@@ -16,6 +16,10 @@ The canonical version is `__version__` in `reconx/__init__.py`.
   `.github/workflows/ci.yml` and add the job to branch protection.
 - **Wire the email breach module into the CLI.** `reconx/modules/email.py` is
   fully implemented but has no entry point, so it is currently dead code.
+- **Publish to PyPI.** The README previously told users to `pip install
+  reconx`, but the project is not published there and the name is
+  unregistered, so that command cannot install ReconX. Register the name
+  before it is claimed by an unrelated package.
 - Backfill tags for v1.1.0–v1.4.0 (only `v1.0.0` was ever tagged).
 
 ## [1.5.0] - 2026-09-15
