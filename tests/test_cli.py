@@ -154,6 +154,16 @@ class TestCLI(unittest.TestCase):
         for command in ("masto", "inflact", "osintgram"):
             self.assertEqual(parser.parse_args([command, "johndoe"]).command, command)
 
+    def test_websift_subcommand(self):
+        parser = create_subcommand_parser()
+        args = parser.parse_args(["websift", "https://example.com"])
+        self.assertEqual(args.command, "websift")
+        self.assertEqual(args.target, "https://example.com")
+
+    def test_websift_legacy_flag(self):
+        parser = create_parser()
+        self.assertEqual(parser.parse_args(["--websift", "https://example.com"]).websift, "https://example.com")
+
     def test_instagram_legacy_flags(self):
         parser = create_parser()
         self.assertEqual(parser.parse_args(["--masto", "@jane@example.com"]).masto, "@jane@example.com")

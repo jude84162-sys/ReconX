@@ -204,5 +204,65 @@ class TestInstagramModules(unittest.TestCase):
         sleep.assert_called_once_with(5)
 
 
+class TestWebSiftModule(unittest.TestCase):
+    @patch("reconx.modules.websift.safe_request")
+    def test_extracts_public_data(self, request):
+        response = Mock()
+        response.ok = True
+        response.status_code = 200
+        response.url = "https://example.com/"
+        response.text = """
+        <html><head><title>Example</title>
+        <meta name="description" content="Public page"></head>
+        <body>Contact jane@example.com or +1 (555) 123-4567.
+        <a href="https://github.com/example">GitHub</a>
+        <a href="/about">About</a></body></html>
+        """
+        request.return_value = response
+
+        from reconx.modules.websift import WebSiftModule
+        result = WebSiftModule(timeout=5).run("https://example.com")
+
+        self.assertEqual(result["title"], "Example")
+        self.assertEqual(result["emails"], ["jane@example.com"])
+        self.assertEqual(result["social_links"], ["https://github.com/example"])
+        self.assertIn("https://example.com/about", result["urls"])
+
+    def test_rejects_non_http_urls(self):
+        from reconx.modules.websift import WebSiftModule
+        with self.assertRaises(ValueError):
+            WebSiftModule().run("file:///etc/passwd")
+
+
+class TestExternalModules(unittest.TestCase):
+    def test_encrypted_github_token_is_decrypted(self):
+        from cryptography.fernet import Fernet
+        from reconx.modules.external import _github_token_for_child
+
+        key = Fernet.generate_key()
+        encrypted = Fernet(key).encrypt(b"test-token")
+        with patch.dict(
+            "os.environ",
+            {
+                "GITHUB_ENCRYPTION_KEY": key.decode(),
+                "GITHUB_ENCRYPTED_TOKEN": encrypted.decode(),
+                "GITHUB_TOKEN": "",
+            },
+            clear=False,
+        ):
+            self.assertEqual(_github_token_for_child(), "test-token")
+
+    def test_partial_encrypted_github_token_configuration_fails(self):
+        from reconx.modules.external import _github_token_for_child
+
+        with patch.dict(
+            "os.environ",
+            {"GITHUB_ENCRYPTION_KEY": "key", "GITHUB_ENCRYPTED_TOKEN": ""},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(ValueError, "Set both"):
+                _github_token_for_child()
+
+
 if __name__ == "__main__":
     unittest.main()

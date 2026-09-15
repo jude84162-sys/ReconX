@@ -53,6 +53,80 @@ pip install git+https://github.com/jude84162-sys/ReconX.git
 > is currently unregistered and does not belong to this project — do not
 > `pip install reconx` expecting this tool.
 
+### 📱 Android / Termux
+
+If you are running ReconX from Termux on Android, install the base build tools
+first and then clone or install the project inside the Termux environment:
+
+```bash
+pkg update && pkg upgrade
+pkg install git python build-essential libffi openssl
+
+# Clone the repo
+cd $HOME
+git clone https://github.com/jude84162-sys/ReconX.git
+cd ReconX
+
+# Install the package in editable mode
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+You can also install directly from GitHub without cloning:
+
+```bash
+pkg install git python
+python -m pip install --upgrade pip
+python -m pip install git+https://github.com/jude84162-sys/ReconX.git
+```
+
+After installation, the CLI is available as `reconx` from Termux:
+
+```bash
+reconx --help
+reconx username johndoe
+reconx domain example.com
+reconx ip 8.8.8.8
+reconx websift https://example.com
+```
+
+> **Tip:** Because mobile devices often have constrained resources, keep the
+> `--workers` value modest when running scans in Termux; for example,
+> `reconx username johndoe -w 10`.
+
+### Optional companion tools
+
+ReconX can launch companion tools without copying their code into this
+repository. Clone GitGhost beside the ReconX directory:
+
+```bash
+cd ..
+git clone https://github.com/cy3erm/gitghost
+cd Reconx
+reconx gitghost --local /path/to/authorized/checkout
+reconx gitghost octocat
+```
+
+External scans can take several minutes because GitGhost inspects repository
+history. ReconX allows up to 10 minutes for each companion-tool run.
+
+GitGhost is not cloned or installed automatically. Set `GITGHOST_PATH` if it
+is stored somewhere else:
+
+```bash
+export GITGHOST_PATH="$HOME/tools/gitghost"
+reconx gitghost octocat
+```
+
+The requested `https://github.com/cy3erm/TikOsint` repository currently
+returns 404. The `reconx tikosint` wrapper is available for a valid local
+checkout once one exists; set `TIKOSINT_PATH` to that checkout:
+
+```bash
+export TIKOSINT_PATH="$HOME/tools/TikOsint"
+reconx tikosint
+```
+
 ```bash
 # Modern subcommand syntax
 reconx username johndoe
@@ -86,6 +160,9 @@ Run `reconx --help` for the full option list.
 | `--masto <handle>` | Look up a Mastodon account (requires the `masto` CLI) |
 | `--inflact <username>` | Fetch a public Inflact profile |
 | `--osintgram <username>` | Run an external Osintgram command (requires `OSINTGRAM_PATH`) |
+| `gitghost <target>` | Run GitGhost against a public GitHub identity or local checkout |
+| `tikosint [target]` | Run a local TikOsint checkout (requires `TIKOSINT_PATH`) |
+| `websift <url>` | Extract public emails, phones, social links, URLs, and metadata from one page |
 
 **Configuration**
 
@@ -105,6 +182,20 @@ Run `reconx --help` for the full option list.
 | `--quiet` | Suppress banner and non-essential output |
 | `--list` | List all available modules |
 
+### WebSift
+
+WebSift analyzes one publicly accessible HTTP(S) page. It extracts email
+addresses, phone numbers, social-media links, page URLs, title, and description.
+It does not crawl linked pages, bypass access controls, authenticate, or submit
+data. Use it only on pages you are authorized to analyze and follow the
+website's terms and applicable law.
+
+```bash
+reconx websift https://example.com -o json -f websift.json
+# Legacy-compatible form:
+reconx --websift https://example.com
+```
+
 ## 🔑 API Keys
 
 Optional integrations read keys from environment variables or a local
@@ -115,8 +206,31 @@ priority.
 |----------|---------|
 | `ABUSEIPDB_API_KEY` | IP threat intelligence |
 | `OSINTGRAM_PATH` | Path to an Osintgram checkout (`--osintgram`) |
+| `GITHUB_ENCRYPTION_KEY` | Fernet key used to decrypt the GitHub token in memory |
+| `GITHUB_ENCRYPTED_TOKEN` | Fernet-encrypted GitHub token passed to GitGhost |
+| `GITHUB_TOKEN` | Plain environment-token fallback for GitGhost |
 
-Keys are never logged and are redacted from error output and URLs.
+Keys are never logged and are redacted from error output and URLs. For
+GitGhost, prefer the encrypted environment variables; ReconX decrypts the
+token only in memory and passes it only to the child process. Never commit the
+key, encrypted value, or plaintext token.
+
+To create an encrypted token without placing the plaintext in a project file,
+run this in a private terminal and keep both printed values out of Git:
+
+```powershell
+python -c "from cryptography.fernet import Fernet; import getpass; k=Fernet.generate_key(); print('GITHUB_ENCRYPTION_KEY='+k.decode()); print('GITHUB_ENCRYPTED_TOKEN='+Fernet(k).encrypt(getpass.getpass('GitHub token: ').encode()).decode())"
+```
+
+Then set the values in your shell session:
+
+```powershell
+$env:GITHUB_ENCRYPTION_KEY = "PASTE_KEY_HERE"
+$env:GITHUB_ENCRYPTED_TOKEN = "PASTE_ENCRYPTED_TOKEN_HERE"
+reconx gitghost octocat
+```
+
+The previously exposed tokens must be revoked before creating a replacement.
 
 ## 🛠️ Development
 

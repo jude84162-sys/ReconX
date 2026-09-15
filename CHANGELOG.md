@@ -8,6 +8,11 @@ The canonical version is `__version__` in `reconx/__init__.py`.
 
 ## [Unreleased]
 
+### Added
+- **WebSift page extraction** via `reconx websift <url>` and
+  `--websift <url>`, extracting public emails, phone numbers, social links,
+  URLs, page title, and description from one HTTP(S) page without crawling.
+
 ### Known follow-ups
 - **Promote the CI lint job from advisory to blocking.** `black`, `isort`,
   `flake8` and `bandit` currently report without failing the build because the

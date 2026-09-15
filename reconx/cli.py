@@ -69,6 +69,7 @@ def create_parser():
     target_group.add_argument("--masto", metavar="HANDLE", help="Look up a Mastodon account")
     target_group.add_argument("--inflact", metavar="USERNAME", help="Fetch a public Inflact profile")
     target_group.add_argument("--osintgram", metavar="USERNAME", help="Run an Osintgram command")
+    target_group.add_argument("--websift", metavar="URL", help="Extract public data from one web page")
 
     _add_common_arguments(parser)
 
@@ -96,9 +97,22 @@ def create_subcommand_parser():
         ("masto", "Look up a Mastodon account"),
         ("inflact", "Fetch a public Inflact profile"),
         ("osintgram", "Run an external Osintgram command"),
+        ("gitghost", "Run GitGhost secret exposure scanning"),
+        ("tikosint", "Run an external TikOsint checkout"),
+        ("websift", "Extract public data from one web page"),
     ):
         command_parser = subparsers.add_parser(command, help=help_text, description=help_text)
-        command_parser.add_argument("target", help=f"{command} target")
+        command_parser.add_argument(
+            "target",
+            nargs="?" if command in ("gitghost", "tikosint") else None,
+            help=f"{command} target",
+        )
+        if command == "gitghost":
+            command_parser.add_argument("--repo", help="Scan one GitHub repository")
+            command_parser.add_argument("--local", help="Scan a local Git checkout")
+            command_parser.add_argument("--org", help="Scan a GitHub organization")
+            command_parser.add_argument("--limit", type=int, help="Limit repositories scanned")
+            command_parser.add_argument("--no-gists", action="store_true", help="Skip gist scanning")
         _add_common_arguments(command_parser)
 
     list_parser = subparsers.add_parser("list", help="List all available modules")
@@ -136,6 +150,7 @@ def list_modules():
         ("masto", "Look up a Mastodon account", "--masto <handle>"),
         ("inflact", "Fetch a public Inflact profile", "--inflact <username>"),
         ("osintgram", "Run an Osintgram command", "--osintgram <username>"),
+        ("websift", "Extract public data from one web page", "websift <url>"),
     ]
     for name, desc, flag in modules_info:
         table.add_row(name, desc, flag)
@@ -222,6 +237,9 @@ def main(argv=None):
         elif getattr(args, "osintgram", None):
             target = args.osintgram
             module_name = "osintgram"
+        elif getattr(args, "websift", None):
+            target = args.websift
+            module_name = "websift"
         elif args.username:
             target = args.username
             module_name = "username"
@@ -278,6 +296,25 @@ def main(argv=None):
             from reconx.modules.osintgram import OsintgramModule
             module = OsintgramModule()
             results = module.run(target, timeout=120)
+        elif module_name == "gitghost":
+            from reconx.modules.external import run_gitghost
+            gitghost_args = []
+            for option in ("repo", "local", "org", "limit"):
+                value = getattr(args, option, None)
+                if value:
+                    gitghost_args.extend([f"--{option}", str(value)])
+            if getattr(args, "no_gists", False):
+                gitghost_args.append("--no-gists")
+            # GitGhost scans repositories and history; the normal HTTP timeout
+            # is too short for a complete external-tool run.
+            results = run_gitghost(target, extra_args=gitghost_args, timeout=max(args.timeout, 600))
+        elif module_name == "tikosint":
+            from reconx.modules.external import run_tikosint
+            results = run_tikosint(target, timeout=max(args.timeout, 600))
+        elif module_name == "websift":
+            from reconx.modules.websift import WebSiftModule
+            module = WebSiftModule(verbose=args.verbose, timeout=args.timeout)
+            module.run(target)
 
     except KeyboardInterrupt:
         print_warning("\nScan interrupted by user")
