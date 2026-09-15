@@ -1,0 +1,21 @@
+# Global owners
+* @jude84162-sys
+
+# Core Framework & CLI Logic
+/reconx/core/          @jude84162-sys
+/reconx/cli.py         @jude84162-sys
+
+# Modules & Scanners (Username, Domain, IP, Email)
+/reconx/modules/       @jude84162-sys
+
+# Tests
+/tests/                @jude84162-sys
+
+# CI/CD & GitHub Workflows
+/.github/workflows/    @jude84162-sys
+/setup.py              @jude84162-sys
+/pyproject.toml        @jude84162-sys
+
+# Documentation
+/docs/                 @jude84162-sys
+/*.md                  @jude84162-sys
