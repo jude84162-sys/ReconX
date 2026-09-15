@@ -3,6 +3,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 
+from reconx import __version__
+
 console = Console()
 
 
@@ -14,7 +16,7 @@ def set_quiet(enabled: bool):
 
 def print_banner():
     """Print the ReconX banner."""
-    banner = r"""
+    banner = rf"""
 [bold cyan]
     ____                         __   __
    / __ \___  ____  ____  ____  / /__/ /
@@ -22,7 +24,7 @@ def print_banner():
  / _, _/  __/ /_/ / /_/ / /_/ / ,< / /
 /_/ |_|\___/ .___/\____/\____/_/|_/_/
            /_/[/bold cyan]
-    [bold yellow]All-in-One OSINT Suite v1.4.0[/bold yellow]
+    [bold yellow]All-in-One OSINT Suite v{__version__}[/bold yellow]
     [dim]By jude84162-sys | github.com/jude84162-sys[/dim]
 """
     console.print(banner)

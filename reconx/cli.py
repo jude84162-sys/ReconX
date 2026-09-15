@@ -1,7 +1,7 @@
 """ReconX CLI - All-in-One OSINT Suite
 
 Usage:
-    python -m reconx -u <username>       Username search across 250+ platforms
+    python -m reconx -u <username>       Username search across hundreds of platforms
     python -m reconx -d <domain>         Domain intelligence
     python -m reconx -i <ip>             IP geolocation & profiling
     python -m reconx username <username> Username search across platforms
@@ -111,7 +111,7 @@ def create_subcommand_parser():
 def list_modules():
     """Display the available ReconX modules."""
     from reconx.core.engine import Engine
-    from reconx.modules.username import UsernameRecon
+    from reconx.modules.username import SITES, UsernameRecon
     from reconx.modules.domain import DomainRecon
     from reconx.modules.ip import IPRecon
 
@@ -127,7 +127,7 @@ def list_modules():
     table.add_column("Flag", style="yellow")
 
     modules_info = [
-        ("username", "Search username across 250+ platforms", "-u <username>"),
+        ("username", f"Search username across {len(SITES)} platforms", "-u <username>"),
         ("domain", "DNS, WHOIS, subdomain enumeration, tech detect", "-d <domain>"),
         ("ip", "Geolocation, ASN, reverse DNS, port scan", "-i <ip>"),
         ("fedifinder", "Find Fediverse accounts", "--fedifinder <target>"),

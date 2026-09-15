@@ -3876,10 +3876,11 @@ def _check_site(site, username, timeout):
 
 
 class UsernameRecon(Module):
-    """Search for a username across 100+ platforms."""
+    """Search for a username across every configured platform."""
 
     name = "username"
-    description = "Search username across 100+ social media platforms and websites"
+    # Derived from SITES so the advertised count can never drift from reality.
+    description = f"Search username across {len(SITES)} social media platforms and websites"
 
     def run(self, target, workers=20):
         """Run username reconnaissance across all platforms."""
