@@ -1,9 +1,6 @@
 import requests
 import socket
 import urllib.parse
-from urllib3.exceptions import InsecureRequestWarning
-
-requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
 def safe_request(url, method="GET", timeout=10, headers=None, params=None, allow_redirects=True, verify_ssl=True):
@@ -44,7 +41,7 @@ def check_username_url(url_template, username, timeout=10):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             },
             allow_redirects=False,
-            verify=False,
+            verify=True,
         )
         return response
     except Exception:

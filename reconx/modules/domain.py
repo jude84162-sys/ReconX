@@ -200,7 +200,7 @@ class DomainRecon(Module):
         """Check HTTP security headers."""
         print_info("Checking HTTP headers...")
         url = f"https://{self.domain}"
-        resp = safe_request(url, timeout=self.timeout, verify_ssl=False)
+        resp = safe_request(url, timeout=self.timeout, verify_ssl=True)
         if resp:
             security_headers = [
                 "Strict-Transport-Security",
@@ -247,7 +247,7 @@ class DomainRecon(Module):
         """Basic technology detection from headers and page content."""
         print_info("Detecting technologies...")
         url = f"https://{self.domain}"
-        resp = safe_request(url, timeout=self.timeout, verify_ssl=False)
+        resp = safe_request(url, timeout=self.timeout, verify_ssl=True)
         if resp:
             techs = []
             content = resp.text.lower()
