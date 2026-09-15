@@ -2,31 +2,82 @@ name: CI
 
 on:
   push:
-    branches: [ main, feat/reconx-v2-rust ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+# Least privilege: this workflow only needs to read the repository.
+permissions:
+  contents: read
 
 jobs:
-  build:
+  test:
+    name: tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./reconx-v2
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          components: rustfmt, clippy
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # pytest lives in the [project.optional-dependencies].dev extra.
+          pip install pytest
+
+      - name: Run test suite
+        run: pytest -q
+
+  lint:
+    # ADVISORY, NOT BLOCKING.
+    #
+    # The Python code predates black/isort/flake8 adoption, so a first blocking
+    # run would fail on cosmetic issues and teach everyone to ignore CI. Each
+    # step below reports its findings but does not fail the job.
+    #
+    # To promote this to a real gate: run `black .` and `isort .` once, clear
+    # the flake8 output, then delete the `continue-on-error` lines and add this
+    # job to the required checks in branch protection.
+    name: lint & security scan (advisory)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          workspaces: "./reconx-v2 -> target"
+          python-version: "3.12"
+          cache: pip
 
-      - run: cargo fmt --all -- --check
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install black isort flake8 bandit
 
-      - run: cargo clippy --all-targets -- -D warnings
+      - name: black --check
+        continue-on-error: true
+        run: black --check --diff .
 
-      - run: cargo test --all
+      - name: isort --check
+        continue-on-error: true
+        run: isort --check-only --diff .
 
-      - run: cargo build --release
+      - name: flake8
+        continue-on-error: true
+        run: flake8 reconx tests
+
+      - name: bandit (reads [tool.bandit] from pyproject.toml)
+        continue-on-error: true
+        run: bandit -r reconx -c pyproject.toml

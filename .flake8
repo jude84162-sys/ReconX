@@ -1,0 +1,8 @@
+[flake8]
+# flake8 cannot read [tool.black] from pyproject.toml, so the line length is
+# duplicated here. Keep it in sync with `line-length = 120` in pyproject.toml.
+max-line-length = 120
+# E203 (whitespace before ':') and W503 (line break before binary operator)
+# are both mandated by black and explicitly disagree with flake8's defaults.
+extend-ignore = E203, W503
+exclude = .git,__pycache__,build,dist,.eggs,*.egg-info,.venv,venv,.pytest_cache
