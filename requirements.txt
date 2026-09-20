@@ -1,0 +1,6 @@
+# ReconX - Comprehensive OSINT Toolkit
+# Zero external dependencies (Python stdlib only)
+#
+# Optional (better results):
+phonenumbers>=8.13.0
+Pillow>=10.0.0
