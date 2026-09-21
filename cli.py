@@ -52,8 +52,8 @@ def banner():
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██╔╝ ██╗             ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝             ║
 ║                                                                  ║
-║              Comprehensive Web Recon  v4.0.0                     ║
-║                        15 Tools Available                        ║
+║              Comprehensive Web Recon  v4.1.1.0                     ║
+║                        18 Tools Available                        ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 """)
 
@@ -90,12 +90,23 @@ def main_menu():
         print(f"  {C.CYAN}[12]{C.RESET} 👁️  Web Monitor")
         print(f"  {C.CYAN}[13]{C.RESET} 🔐 SSL/TLS Analyzer")
         print()
-        print(f"{C.BOLD}{C.RED}  ── Vulnerability Scan (active) ──{C.RESET}")
-        print(f"  {C.RED}[16]{C.RESET} 🎯 DIRB Content Scan")
+        print(f"{C.BOLD}{C.RED}  ── Web Vuln Scanners (active) ──{C.RESET}")
+        print(f"  {C.RED}[14]{C.RESET} 💉 SQL Injection")
+        print(f"  {C.RED}[15]{C.RESET} 🎯 XSS")
+        print(f"  {C.RED}[16]{C.RESET} 🌐 SSRF")
+        print(f"  {C.RED}[17]{C.RESET} 📐 SSTI")
+        print(f"  {C.RED}[18]{C.RESET} 💻 Command Injection")
+        print(f"  {C.RED}[19]{C.RESET} 🔑 JWT Attacks")
+        print(f"  {C.RED}[20]{C.RESET} 🚀 ALL Web Vuln Scanners")
+        print()
+        print(f"{C.BOLD}{C.RED}  ── Bug Bounty & Content ──{C.RESET}")
+        print(f"  {C.RED}[21]{C.RESET} 🎯 DIRB Content Scan")
+        print(f"  {C.RED}[22]{C.RESET} 🐛 Bug Bounty Checks")
+        print(f"  {C.RED}[23]{C.RESET} 💰 Bug Bounty Nikto (multi-target)")
         print()
         print(f"{C.BOLD}{C.GREEN}  ── Full Recon (recommended) ──{C.RESET}")
-        print(f"  {C.GREEN}[14]{C.RESET} 🎯 Full Web Recon   (parallel, 12 tools)")
-        print(f"  {C.GREEN}[15]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
+        print(f"  {C.GREEN}[24]{C.RESET} 🎯 Full Web Recon   (parallel, 14 tools)")
+        print(f"  {C.GREEN}[25]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
         print()
         print(f"{C.BOLD}{C.MAGENTA}  ── Actions ──{C.RESET}")
         print(f"  {C.GREEN}[i]{C.RESET}  ℹ️  Environment")
@@ -120,9 +131,18 @@ def main_menu():
             "11": waf_detector_menu,
             "12": web_monitor_menu,
             "13": ssl_analyzer_menu,
-            "16": dirb_menu,
-            "14": full_web_recon_menu,
-            "15": fast_web_recon_menu,
+            "14": sqli_menu,
+            "15": xss_menu,
+            "16": ssrf_menu,
+            "17": ssti_menu,
+            "18": cmdi_menu,
+            "19": jwt_menu,
+            "20": all_vuln_menu,
+            "21": dirb_menu,
+            "22": bounty_checks_menu,
+            "23": bugbounty_nikto_menu,
+            "24": full_web_recon_menu,
+            "25": fast_web_recon_menu,
             "i": show_env,
             "h": show_help,
             "o": show_outputs,
@@ -542,6 +562,229 @@ def dirb_menu():
     pause()
 
 
+
+
+def bounty_checks_menu():
+    clear()
+    banner()
+    section("🐛 Bug Bounty Checks")
+
+    print(f"  {C.RED}⚠ Active checks — use only on authorized targets{C.RESET}\n")
+    print(f"  {C.GRAY}Checks: VCS, API docs, CORS, Open redirect, GraphQL, JWT{C.RESET}\n")
+
+    u = prompt("  URL (e.g. https://example.com)")
+    if not u:
+        return
+
+    try:
+        from modules.vuln.bounty_checks import run_bounty_checks, print_bounty_report
+        r = run_bounty_checks(u)
+        print_bounty_report(r)
+
+        if confirm("  Save JSON report?"):
+            import json
+            from pathlib import Path
+            from datetime import datetime
+
+            outputs = BASE_DIR / "outputs"
+            outputs.mkdir(exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            fp = outputs / f"bounty_checks_{ts}.json"
+            with open(fp, "w", encoding="utf-8") as fh:
+                json.dump(r, fh, indent=2, ensure_ascii=False, default=str)
+            print(f"{C.GREEN}  ✓ Saved: {fp}{C.RESET}")
+
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def bugbounty_nikto_menu():
+    clear()
+    banner()
+    section("💰 Bug Bounty Nikto")
+
+    print(f"  {C.RED}⚠ Active scan — use only on authorized bug bounty programs{C.RESET}\n")
+    print(f"  {C.GRAY}Multi-target parallel + WAF-aware + payout estimation{C.RESET}\n")
+
+    mode = prompt("  Target (single URL or -f targets.txt)", default="")
+    if not mode:
+        return
+
+    if mode.startswith("-f "):
+        target_file = mode[3:].strip()
+        try:
+            with open(target_file) as fh:
+                targets = [l.strip() for l in fh if l.strip() and not l.startswith("#")]
+        except Exception as e:
+            print(f"{C.RED}  ✗ Can't read file: {e}{C.RESET}")
+            pause()
+            return
+    else:
+        targets = [mode]
+
+    waf_skip = confirm("  Skip targets with WAF?")
+    workers = prompt("  Workers", default="3")
+    try:
+        workers = int(workers)
+    except ValueError:
+        workers = 3
+
+    try:
+        from modules.vuln.bugbounty_nikto import (
+            scan_targets, print_bounty_nikto_report, save_bounty_report,
+        )
+        from modules.vuln.nikto_engine import is_nikto_available
+
+        if not is_nikto_available():
+            print(f"{C.RED}  ✗ Nikto not installed{C.RESET}")
+            print(f"{C.GRAY}  Install: sudo apt install nikto{C.RESET}")
+            pause()
+            return
+
+        print(f"\n{C.YELLOW}  ⚡ Scanning {len(targets)} target(s)...{C.RESET}\n")
+
+        r = scan_targets(targets, workers=workers, waf_skip=waf_skip, verbose=True)
+        print_bounty_nikto_report(r)
+
+        if confirm("  Save JSON report?"):
+            out = save_bounty_report(r)
+            print(f"{C.GREEN}  ✓ Saved: {out}{C.RESET}")
+
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+
+
+# ============================================================
+# Web Vulnerability Scanners (20-26)
+# ============================================================
+
+def _run_vuln_scanner(scanner_key, title, extra_tip=None):
+    """Generic vuln scanner runner."""
+    clear()
+    banner()
+    section(title)
+
+    print(f"  {C.RED}⚠ Active scan — use only on authorized targets{C.RESET}")
+    if extra_tip:
+        print(f"  {C.GRAY}{extra_tip}{C.RESET}")
+    print()
+
+    u = prompt("  URL (with params if possible)")
+    if not u:
+        return
+
+    try:
+        from modules.vuln.scanner_manager import run_scanner, print_all_report
+        from modules.vuln.scanner_manager import SCANNERS
+
+        print(f"\n{C.YELLOW}  ⚡ Running {SCANNERS[scanner_key]['name']} scan...{C.RESET}\n")
+
+        r = run_scanner(scanner_key, u, timeout=300, verbose=True)
+
+        # Print using scanner's own report if available
+        try:
+            mod = __import__(SCANNERS[scanner_key]["module"], fromlist=["print_report"])
+            print_fn = getattr(mod, "print_report")
+            print_fn(r)
+        except Exception:
+            # Fallback
+            from modules.vuln.scanner_manager import print_all_report
+            print_all_report({
+                "target": u,
+                "scanners_run": [scanner_key],
+                "scanners_failed": [],
+                "findings": r.get("findings", []),
+                "total_findings": len(r.get("findings", [])),
+            })
+
+        if confirm("  Save JSON report?"):
+            save_report({f"vuln_{scanner_key}": r}, f"vuln_{scanner_key}")
+
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def sqli_menu():
+    _run_vuln_scanner("sqli", "💉 SQL Injection Scanner",
+                      "Needs: sqlmap (sudo apt install sqlmap)")
+
+
+def xss_menu():
+    _run_vuln_scanner("xss", "🎯 XSS Scanner",
+                      "Optional: dalfox (for better detection)")
+
+
+def ssrf_menu():
+    _run_vuln_scanner("ssrf", "🌐 SSRF Scanner",
+                      "Detects AWS/GCP metadata, file:// leaks")
+
+
+def ssti_menu():
+    _run_vuln_scanner("ssti", "📐 SSTI Scanner",
+                      "Tests 16 template engines (Jinja2, Twig, Freemarker...)")
+
+
+def cmdi_menu():
+    _run_vuln_scanner("cmdi", "💻 Command Injection Scanner",
+                      "Time-based + output-based detection")
+
+
+def jwt_menu():
+    _run_vuln_scanner("jwt", "🔑 JWT Scanner",
+                      "Tests alg:none bypass + weak secrets")
+
+
+def all_vuln_menu():
+    clear()
+    banner()
+    section("🚀 ALL Web Vulnerability Scanners")
+
+    print(f"  {C.RED}⚠ Active scan — use only on authorized targets{C.RESET}\n")
+    print(f"  {C.GRAY}Runs: SQLi, XSS, SSRF, SSTI, CMDi, JWT (parallel){C.RESET}\n")
+
+    u = prompt("  URL (with params)")
+    if not u:
+        return
+
+    workers = prompt("  Workers", default="3")
+    try:
+        workers = int(workers)
+    except ValueError:
+        workers = 3
+
+    print(f"\n{C.YELLOW}  ⚡ Running ALL vuln scanners on {u}...{C.RESET}")
+
+    try:
+        from modules.vuln.scanner_manager import run_all, print_all_report
+
+        r = run_all(u, workers=workers, verbose=True)
+        print_all_report(r)
+
+        if confirm("  Save JSON report?"):
+            save_report({"vuln_all": r}, "vuln_all")
+
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
 def full_web_recon_menu():
     clear()
     banner()
@@ -664,7 +907,7 @@ def show_help():
     banner()
     section("❓ Help")
 
-    print(f"{C.BOLD}  ReconX v4.0.0 — Web Recon Toolkit (15 tools){C.RESET}")
+    print(f"{C.BOLD}  ReconX v4.1.0 — Web Recon Toolkit (15 tools){C.RESET}")
     print(f"  Zero external tools needed. Termux, Kali, WSL.")
     print()
     print(f"{C.BOLD}  Recon Modules:{C.RESET}")
@@ -686,9 +929,14 @@ def show_help():
     print(f"  {C.CYAN}12{C.RESET} Web Monitor")
     print(f"  {C.CYAN}13{C.RESET} SSL/TLS Analyzer")
     print()
+    print(f"{C.BOLD}{C.RED}  Vulnerability Scan (active):{C.RESET}")
+    print(f"  {C.RED}14{C.RESET} DIRB Content Scan")
+    print(f"  {C.RED}15{C.RESET} Bug Bounty Checks")
+    print(f"  {C.RED}16{C.RESET} Bug Bounty Nikto")
+    print()
     print(f"{C.BOLD}{C.GREEN}  Full Recon:{C.RESET}")
-    print(f"  {C.GREEN}14{C.RESET} Full Web Recon (parallel)")
-    print(f"  {C.GREEN}15{C.RESET} Fast Web Recon")
+    print(f"  {C.GREEN}17{C.RESET} Full Web Recon (parallel, 14 tools)")
+    print(f"  {C.GREEN}18{C.RESET} Fast Web Recon")
     print()
     print(f"{C.BOLD}  CLI usage:{C.RESET}")
     print(f"  python recon.py example.com")
@@ -745,7 +993,7 @@ def save_report(data, prefix="report"):
     fp = outputs / f"{prefix}_{ts}.json"
 
     data["_saved_at"] = datetime.now().isoformat()
-    data["_tool"] = "ReconX v4.0.0"
+    data["_tool"] = "ReconX v4.1.0"
 
     try:
         with open(fp, "w", encoding="utf-8") as f:
