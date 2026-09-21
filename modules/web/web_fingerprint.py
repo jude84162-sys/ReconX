@@ -141,34 +141,70 @@ def _make_request(url, timeout=15, follow_redirect=True):
 
 
 def _detect_technologies(body, headers):
-    """Detect technologies from body + headers."""
+    """Detect technologies from body + headers, with confidence per tech."""
     detected = {}
 
+    # === From body ===
     if body:
         for tech, config in TECH_SIGNATURES.items():
+            matches = 0
             for pattern in config["patterns"]:
                 if re.search(pattern, body, re.IGNORECASE):
-                    if tech not in detected:
-                        detected[tech] = {
-                            "name": tech,
-                            "type": config["type"],
-                            "source": "body"
-                        }
-                    break
-
-    # Check headers
-    header_str = str(headers).lower()
-    for tech, config in TECH_SIGNATURES.items():
-        if tech in detected:
-            continue
-        for pattern in config["patterns"]:
-            if re.search(pattern, header_str, re.IGNORECASE):
+                    matches += 1
+            if matches > 0:
+                # Multiple pattern matches = higher confidence
+                conf = min(0.6 + (matches * 0.15), 0.95)
                 detected[tech] = {
                     "name": tech,
                     "type": config["type"],
-                    "source": "headers"
+                    "source": "body",
+                    "confidence": round(conf, 2),
+                    "matches": matches,
                 }
+
+    # === From headers (boost confidence) ===
+    header_str = str(headers).lower()
+    for tech, config in TECH_SIGNATURES.items():
+        header_match = False
+        for pattern in config["patterns"]:
+            if re.search(pattern, header_str, re.IGNORECASE):
+                header_match = True
                 break
+
+        if header_match:
+            if tech in detected:
+                # Boost existing
+                detected[tech]["confidence"] = min(
+                    detected[tech]["confidence"] + 0.20, 0.99
+                )
+                detected[tech]["source"] = "body+headers"
+            else:
+                detected[tech] = {
+                    "name": tech,
+                    "type": config["type"],
+                    "source": "headers",
+                    "confidence": 0.85,
+                    "matches": 1,
+                }
+
+    # === Server header detection (high confidence) ===
+    server = headers.get("Server", "")
+    powered = headers.get("X-Powered-By", "")
+    for tech, config in TECH_SIGNATURES.items():
+        if tech in detected:
+            continue
+        for header_val in [server, powered]:
+            if header_val:
+                for pattern in config["patterns"]:
+                    if re.search(pattern, header_val, re.IGNORECASE):
+                        detected[tech] = {
+                            "name": tech,
+                            "type": config["type"],
+                            "source": "server_header",
+                            "confidence": 0.95,
+                            "matches": 1,
+                        }
+                        break
 
     return detected
 

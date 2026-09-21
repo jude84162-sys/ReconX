@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ReconX - Interactive CLI (20 tools)"""
+"""ReconX - Interactive CLI v3 (Web Recon Only)"""
 
 import os
 import sys
@@ -21,7 +21,6 @@ class C:
     WHITE = "\033[97m"
     GRAY = "\033[90m"
     MAGENTA = "\033[95m"
-    BLUE = "\033[94m"
 
 
 def clear():
@@ -53,8 +52,8 @@ def banner():
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██╔╝ ██╗             ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝             ║
 ║                                                                  ║
-║              Comprehensive OSINT Toolkit  v1.0.0                 ║
-║                        20 Tools Available                        ║
+║              Comprehensive Web Recon  v3.0.0                     ║
+║                        10 Tools Available                        ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 """)
 
@@ -72,38 +71,21 @@ def main_menu():
         clear()
         banner()
 
-        print(f"{C.BOLD}{C.MAGENTA}  ── Target OSINT ──{C.RESET}")
-        print(f"  {C.CYAN}[1]{C.RESET}  📱 Phone OSINT")
-        print(f"  {C.CYAN}[2]{C.RESET}  👤 Username OSINT (CB-UserHunter)")
-        print(f"  {C.CYAN}[3]{C.RESET}  🌐 Domain OSINT")
-        print(f"  {C.CYAN}[4]{C.RESET}  🌍 IP OSINT")
-        print(f"  {C.CYAN}[5]{C.RESET}  📧 Email OSINT")
-        print(f"  {C.CYAN}[6]{C.RESET}  🖼️  Image Metadata (EXIF)")
-        print(f"  {C.CYAN}[7]{C.RESET}  🐙 GitHub Recon")
-        print(f"  {C.CYAN}[8]{C.RESET}  🔓 Breach Checker")
-        print()
-        print(f"{C.BOLD}{C.MAGENTA}  ── Social Media ──{C.RESET}")
-        print(f"  {C.CYAN}[9]{C.RESET}  📱 Social Media Deep (20+ platforms)")
-        print(f"  {C.CYAN}[10]{C.RESET} 📸 Instagram & Facebook (Public)")
-        print()
-        print(f"{C.BOLD}{C.MAGENTA}  ── Network ──{C.RESET}")
-        print(f"  {C.CYAN}[11]{C.RESET} 🔍 Port Scanner")
-        print(f"  {C.CYAN}[12]{C.RESET} 🌐 DNS Deep Recon")
-        print()
         print(f"{C.BOLD}{C.MAGENTA}  ── Web Recon ──{C.RESET}")
-        print(f"  {C.CYAN}[13]{C.RESET} 📧 Email Harvester")
-        print(f"  {C.CYAN}[14]{C.RESET} 🌐 Subdomain Enumerator")
-        print(f"  {C.CYAN}[15]{C.RESET} 🌍 Web Fingerprint")
-        print(f"  {C.CYAN}[16]{C.RESET} 🔐 SSL/TLS Analyzer")
-        print(f"  {C.CYAN}[17]{C.RESET} 📂 Directory Buster")
+        print(f"  {C.CYAN}[1]{C.RESET}  🌐 Domain OSINT")
+        print(f"  {C.CYAN}[2]{C.RESET}  🌍 IP OSINT (multi-source)")
+        print(f"  {C.CYAN}[3]{C.RESET}  🔍 Port Scanner")
+        print(f"  {C.CYAN}[4]{C.RESET}  🌐 DNS Deep Recon")
+        print(f"  {C.CYAN}[5]{C.RESET}  🌐 Subdomain Enumerator")
+        print(f"  {C.CYAN}[6]{C.RESET}  🌍 Web Fingerprint")
+        print(f"  {C.CYAN}[7]{C.RESET}  🔐 SSL/TLS Analyzer")
+        print(f"  {C.CYAN}[8]{C.RESET}  📂 Directory Buster")
         print()
-        print(f"{C.BOLD}{C.MAGENTA}  ── Combined ──{C.RESET}")
-        print(f"  {C.CYAN}[18]{C.RESET} 🎯 Job Scan (all-in-one)")
-        print(f"  {C.CYAN}[19]{C.RESET} 👤 CB-UserHunter Direct")
-        print(f"  {C.CYAN}[20]{C.RESET} 📊 Generate HTML Report")
+        print(f"{C.BOLD}{C.GREEN}  ── Full Recon (recommended) ──{C.RESET}")
+        print(f"  {C.GREEN}[9]{C.RESET}  🎯 Full Web Recon   (parallel, 8 tools)")
+        print(f"  {C.GREEN}[10]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
         print()
         print(f"{C.BOLD}{C.MAGENTA}  ── Actions ──{C.RESET}")
-        print(f"  {C.GREEN}[F]{C.RESET}  ⚡ Full Recon (auto-detect)")
         print(f"  {C.GREEN}[i]{C.RESET}  ℹ️  Environment")
         print(f"  {C.GREEN}[h]{C.RESET}  ❓ Help")
         print(f"  {C.GREEN}[o]{C.RESET}  📁 View Outputs")
@@ -113,27 +95,16 @@ def main_menu():
         choice = input(f"{C.YELLOW}  → Choice: {C.RESET}").strip().lower()
 
         handlers = {
-            "1": phone_menu,
-            "2": username_menu,
-            "3": domain_menu,
-            "4": ip_menu,
-            "5": email_menu,
-            "6": metadata_menu,
-            "7": github_menu,
-            "8": breach_menu,
-            "9": social_deep_menu,
-            "10": social_media_menu,
-            "11": portscan_menu,
-            "12": dns_menu,
-            "13": email_harvest_menu,
-            "14": subdomain_menu,
-            "15": web_fingerprint_menu,
-            "16": ssl_analyzer_menu,
-            "17": dir_buster_menu,
-            "18": job_scan_menu,
-            "19": cb_userhunter_menu,
-            "20": html_report_menu,
-            "f": full_recon_menu,
+            "1": domain_menu,
+            "2": ip_menu,
+            "3": portscan_menu,
+            "4": dns_menu,
+            "5": subdomain_menu,
+            "6": web_fingerprint_menu,
+            "7": ssl_analyzer_menu,
+            "8": dir_buster_menu,
+            "9": full_web_recon_menu,
+            "10": fast_web_recon_menu,
             "i": show_env,
             "h": show_help,
             "o": show_outputs,
@@ -150,57 +121,8 @@ def main_menu():
 
 
 # ============================================================
-# Target OSINT Handlers
+# Web Recon Handlers
 # ============================================================
-
-def phone_menu():
-    clear()
-    banner()
-    section("📱 Phone OSINT")
-
-    n = prompt("  Phone number (+963...)")
-    if not n:
-        return
-
-    try:
-        from modules.phone_osint import run_phone_osint, print_phone_report
-        r = run_phone_osint(n)
-        print_phone_report(r)
-        if confirm("  Save?"):
-            save_report({"phone": r}, "phone")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-def username_menu():
-    clear()
-    banner()
-    section("👤 Username OSINT (CB-UserHunter)")
-
-    u = prompt("  Username")
-    if not u:
-        return
-
-    print(f"\n{C.BOLD}  Filter:{C.RESET}")
-    print(f"  [1] All  [2] Social  [3] Dev  [4] Gaming  [5] Crypto  [6] Cyber")
-    f = prompt("\n  Filter", default="1")
-    fm = {"1": None, "2": "social", "3": "dev", "4": "gaming", "5": "crypto", "6": "cyber"}
-
-    try:
-        from modules.cb_userhunter_clone import (
-            search_username, print_report as p, save_report as s
-        )
-        r = search_username(u, filter_type=fm.get(f))
-        p(r)
-        if confirm("  Save?"):
-            s(r, str(BASE_DIR / "outputs"))
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
 
 def domain_menu():
     clear()
@@ -212,13 +134,15 @@ def domain_menu():
         return
 
     try:
-        from modules.domain_osint import run_domain_osint, print_domain_report
+        from modules.web.domain_osint import run_domain_osint, print_domain_report
         r = run_domain_osint(d)
         print_domain_report(r)
         if confirm("  Save?"):
             save_report({"domain": r}, "domain")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
 
     pause()
 
@@ -228,179 +152,47 @@ def ip_menu():
     banner()
     section("🌍 IP OSINT")
 
-    ip = prompt("  IP")
+    ip = prompt("  IP address")
     if not ip:
         return
 
     try:
-        from modules.ip_osint import run_ip_osint, print_ip_report
+        from modules.target.ip_osint import run_ip_osint, print_ip_report
         r = run_ip_osint(ip)
         print_ip_report(r)
         if confirm("  Save?"):
             save_report({"ip": r}, "ip")
+    except ImportError:
+        print(f"{C.RED}  ✗ IP OSINT module moved to archive{C.RESET}")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
 
     pause()
 
-
-def email_menu():
-    clear()
-    banner()
-    section("📧 Email OSINT")
-
-    e = prompt("  Email")
-    if not e:
-        return
-
-    try:
-        from modules.email_osint import run_email_osint, print_email_report
-        r = run_email_osint(e)
-        print_email_report(r)
-        if confirm("  Save?"):
-            save_report({"email": r}, "email")
-    except Exception as ex:
-        print(f"{C.RED}  Error: {ex}{C.RESET}")
-
-    pause()
-
-
-def metadata_menu():
-    clear()
-    banner()
-    section("🖼️ Image Metadata (EXIF)")
-
-    f = prompt("  File path")
-    if not f:
-        return
-
-    try:
-        from modules.metadata_osint import run_metadata_osint, print_metadata_report
-        r = run_metadata_osint(f)
-        print_metadata_report(r)
-        if confirm("  Save?"):
-            save_report({"metadata": r}, "metadata")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-def github_menu():
-    clear()
-    banner()
-    section("🐙 GitHub Recon")
-
-    u = prompt("  GitHub username")
-    if not u:
-        return
-
-    try:
-        from modules.github_recon import run_github_recon, print_github_report
-        r = run_github_recon(u)
-        print_github_report(r)
-        if confirm("  Save?"):
-            save_report({"github": r}, "github")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-def breach_menu():
-    clear()
-    banner()
-    section("🔓 Breach Checker")
-
-    t = prompt("  Email/username/phone")
-    if not t:
-        return
-
-    try:
-        from modules.breach_checker import run_breach_check, print_breach_report
-        r = run_breach_check(t)
-        print_breach_report(r)
-        if confirm("  Save?"):
-            save_report({"breach": r}, "breach")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-# ============================================================
-# Social Media Handlers
-# ============================================================
-
-def social_deep_menu():
-    clear()
-    banner()
-    section("📱 Social Media Deep")
-
-    u = prompt("  Username")
-    if not u:
-        return
-
-    try:
-        from modules.social_deep import run_social_deep, print_social_deep_report
-        r = run_social_deep(u)
-        print_social_deep_report(r)
-        if confirm("  Save?"):
-            save_report({"social": r}, "social")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-def social_media_menu():
-    clear()
-    banner()
-    section("📸 Instagram & Facebook (Public Info)")
-
-    print(f"  {C.GRAY}Gathers only publicly available information{C.RESET}")
-    print(f"  {C.GRAY}No login required. No API keys.{C.RESET}\n")
-
-    u = prompt("  Username")
-    if not u:
-        return
-
-    try:
-        from modules.social_media_osint import (
-            run_social_media_osint, print_social_media_report
-        )
-        r = run_social_media_osint(u)
-        print_social_media_report(r)
-        if confirm("  Save?"):
-            save_report({"social_media": r}, "social_media")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-        import traceback
-        traceback.print_exc()
-
-    pause()
-
-
-# ============================================================
-# Network Handlers
-# ============================================================
 
 def portscan_menu():
     clear()
     banner()
     section("🔍 Port Scanner")
 
-    t = prompt("  Target")
+    t = prompt("  Target (domain or IP)")
     if not t:
         return
 
-    print(f"\n  [1] common [2] top100 [3] web [4] db [5] windows [6] custom")
+    print(f"\n  {C.BOLD}Presets:{C.RESET}")
+    print(f"  [1] common   [2] top100   [3] web    [4] db")
+    print(f"  [5] windows  [6] all      [7] custom")
     c = prompt("  Preset", default="1")
-    pm = {"1": "common", "2": "top100", "3": "web", "4": "db", "5": "windows"}
-    spec = prompt("  Range", default="80-443") if c == "6" else pm.get(c, "common")
+
+    pm = {"1": "common", "2": "top100", "3": "web", "4": "db", "5": "windows", "6": "all"}
+
+    if c == "7":
+        spec = prompt("  Range (e.g. 80-443 or 80,443,8080)", default="80-443")
+    else:
+        spec = pm.get(c, "common")
 
     try:
-        from modules.port_open_scan import get_ports, scan_port_range, print_scan_report
+        from modules.network.port_scan import get_ports, scan_port_range, print_scan_report
         ports = get_ports(spec)
         print(f"\n{C.YELLOW}  Scanning {len(ports)} ports on {t}...{C.RESET}\n")
 
@@ -419,6 +211,8 @@ def portscan_menu():
             save_report({"port_scan": r}, "portscan")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
 
     pause()
 
@@ -433,38 +227,15 @@ def dns_menu():
         return
 
     try:
-        from modules.dns_deep import run_dns_deep, print_dns_deep_report
+        from modules.network.dns_deep import run_dns_deep, print_dns_deep_report
         r = run_dns_deep(d)
         print_dns_deep_report(r)
         if confirm("  Save?"):
             save_report({"dns_deep": r}, "dns_deep")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-# ============================================================
-# Web Recon Handlers
-# ============================================================
-
-def email_harvest_menu():
-    clear()
-    banner()
-    section("📧 Email Harvester")
-
-    d = prompt("  Domain")
-    if not d:
-        return
-
-    try:
-        from modules.email_harvester import run_email_harvest, print_email_harvest_report
-        r = run_email_harvest(d)
-        print_email_harvest_report(r)
-        if confirm("  Save?"):
-            save_report({"email_harvest": r}, "email_harvest")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
 
     pause()
 
@@ -472,7 +243,7 @@ def email_harvest_menu():
 def subdomain_menu():
     clear()
     banner()
-    section("🌐 Subdomain Enumerator (Subfinder Clone)")
+    section("🌐 Subdomain Enumerator")
 
     print(f"  {C.GRAY}7 passive sources + bruteforce{C.RESET}\n")
 
@@ -481,7 +252,7 @@ def subdomain_menu():
         return
 
     try:
-        from modules.subdomain_enum import run_subdomain_enum, print_subdomain_report
+        from modules.web.subdomain_enum import run_subdomain_enum, print_subdomain_report
         r = run_subdomain_enum(d)
         print_subdomain_report(r)
         if confirm("  Save?"):
@@ -499,12 +270,12 @@ def web_fingerprint_menu():
     banner()
     section("🌍 Web Fingerprint")
 
-    u = prompt("  URL")
+    u = prompt("  URL or domain")
     if not u:
         return
 
     try:
-        from modules.web_fingerprint import run_web_fingerprint, print_fingerprint_report
+        from modules.web.web_fingerprint import run_web_fingerprint, print_fingerprint_report
         r = run_web_fingerprint(u)
         print_fingerprint_report(r)
         if confirm("  Save?"):
@@ -525,7 +296,7 @@ def ssl_analyzer_menu():
         return
 
     try:
-        from modules.ssl_analyzer import run_ssl_analyzer, print_ssl_report
+        from modules.network.ssl_analyzer import run_ssl_analyzer, print_ssl_report
         r = run_ssl_analyzer(h)
         print_ssl_report(r)
         if confirm("  Save?"):
@@ -541,12 +312,12 @@ def dir_buster_menu():
     banner()
     section("📂 Directory Buster")
 
-    u = prompt("  Base URL")
+    u = prompt("  Base URL (e.g. https://example.com)")
     if not u:
         return
 
     try:
-        from modules.dir_buster import run_dir_bust, print_dir_bust_report
+        from modules.web.dir_buster import run_dir_bust, print_dir_bust_report
         r = run_dir_bust(u)
         print_dir_bust_report(r)
         if confirm("  Save?"):
@@ -558,157 +329,40 @@ def dir_buster_menu():
 
 
 # ============================================================
-# Combined Handlers
+# Full Recon (delegates to recon.py)
 # ============================================================
 
-def job_scan_menu():
+def full_web_recon_menu():
+    """Full Web Recon — uses recon.py v3 (parallel)."""
     clear()
     banner()
-    section("🎯 Job Scan (All-in-One)")
+    section("🎯 Full Web Recon")
 
-    print(f"  {C.GRAY}domain + subdomains + ports + ssl + fingerprint{C.RESET}\n")
+    print(f"  {C.GRAY}8 tools in parallel: domain, ip, ports, dns, subs, fp, ssl, dirs{C.RESET}")
+    print(f"  {C.GRAY}Auto HTML + TXT + JSON reports{C.RESET}\n")
 
     t = prompt("  Domain")
     if not t:
         return
 
-    print(f"\n{C.YELLOW}  ⚡ Starting job scan on {t}...{C.RESET}\n")
+    max_ips = prompt("  Max IPs to check", default="3")
+    try:
+        max_ips = int(max_ips)
+    except ValueError:
+        max_ips = 3
+
+    print(f"\n{C.YELLOW}  ⚡ Starting FULL web recon on {t}...{C.RESET}\n")
 
     try:
-        from modules.domain_osint import run_domain_osint
-        from modules.port_open_scan import scan_port_range, get_ports
-        from modules.web_fingerprint import run_web_fingerprint
-        from modules.ssl_analyzer import run_ssl_analyzer
-
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "target": t,
-            "results": {}
-        }
-
-        # 1. Domain
-        print(f"{C.CYAN}[1/4] Domain Recon...{C.RESET}")
-        d = run_domain_osint(t, deep=False)
-        report["results"]["domain"] = d
-        ips = d.get("ips", {}).get("A", [])
-        subs = d.get("subdomains", [])
-        print(f"      IPs: {len(ips)}, Subdomains: {len(subs)}")
-
-        # 2. Ports
-        if ips:
-            print(f"\n{C.CYAN}[2/4] Port Scan on {ips[0]}...{C.RESET}")
-            pr = scan_port_range(ips[0], get_ports("common"),
-                                 workers=100, grab_banner=False)
-            report["results"]["ports"] = pr
-            print(f"      Open ports: {len(pr['open_ports'])}")
-            for p in pr['open_ports'][:5]:
-                print(f"        • {p['port']}/{p['service']}")
-
-        # 3. Fingerprint
-        print(f"\n{C.CYAN}[3/4] Web Fingerprint...{C.RESET}")
-        fp = run_web_fingerprint(t)
-        report["results"]["fingerprint"] = fp
-        techs = fp.get("technologies", [])
-        print(f"      Technologies: {len(techs)}")
-
-        # 4. SSL
-        print(f"\n{C.CYAN}[4/4] SSL/TLS...{C.RESET}")
-        ssl_r = run_ssl_analyzer(t)
-        report["results"]["ssl"] = ssl_r
-        print(f"      Grade: {ssl_r.get('grade', '?')}")
-
-        print(f"\n{C.GREEN}  ✓ Job scan complete!{C.RESET}")
-        print(f"\n  {C.BOLD}Summary:{C.RESET}")
-        print(f"    IPs:          {len(ips)}")
-        print(f"    Subdomains:   {len(subs)}")
-        print(f"    Open ports:   {len(report['results'].get('ports', {}).get('open_ports', []))}")
-        print(f"    Technologies: {len(techs)}")
-        print(f"    SSL Grade:    {ssl_r.get('grade', '?')}")
-
-        if confirm("\n  Save report + HTML?"):
-            save_report({"job_scan": report}, "job_scan")
-            try:
-                from modules.html_report import save_html_report
-                out = save_html_report(report, "job_scan")
-                print(f"{C.GREEN}  ✓ HTML: {out}{C.RESET}")
-            except Exception as e:
-                print(f"{C.YELLOW}  HTML: {e}{C.RESET}")
-
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-        import traceback
-        traceback.print_exc()
-
-    pause()
-
-
-def cb_userhunter_menu():
-    clear()
-    banner()
-    section("👤 CB-UserHunter Direct (100+ platforms)")
-
-    u = prompt("  Username")
-    if not u:
-        return
-
-    try:
-        from modules.cb_userhunter_clone import (
-            search_username, print_report as p, save_report as s
+        from recon import run_recon
+        run_recon(
+            t,
+            deep=True,
+            save_json_flag=True,
+            save_html_report=True,
+            save_txt_report=True,
+            max_ips=max_ips,
         )
-        r = search_username(u)
-        p(r)
-        if confirm("  Save?"):
-            s(r, str(BASE_DIR / "outputs"))
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-def html_report_menu():
-    clear()
-    banner()
-    section("📊 Generate HTML Report")
-
-    print(f"  {C.GRAY}Combines multiple tools into one HTML report{C.RESET}\n")
-
-    t = prompt("  Target (domain/username/ip/phone/email)")
-    if not t:
-        return
-
-    report = {}
-
-    try:
-        # Auto-detect and run
-        if "@" in t:
-            from modules.email_osint import run_email_osint
-            report["email"] = run_email_osint(t)
-        elif t.startswith("+") or (t.replace("-", "").isdigit() and len(t) > 6):
-            from modules.phone_osint import run_phone_osint
-            report["phone"] = run_phone_osint(t)
-        elif t.count(".") == 3 and all(p.isdigit() for p in t.split(".")):
-            from modules.ip_osint import run_ip_osint
-            report["ip"] = run_ip_osint(t)
-        elif "." in t:
-            from modules.domain_osint import run_domain_osint
-            from modules.ssl_analyzer import run_ssl_analyzer
-            from modules.web_fingerprint import run_web_fingerprint
-            print(f"{C.CYAN}[1/3] Domain...{C.RESET}")
-            report["domain"] = run_domain_osint(t)
-            print(f"{C.CYAN}[2/3] SSL...{C.RESET}")
-            report["ssl"] = run_ssl_analyzer(t)
-            print(f"{C.CYAN}[3/3] Fingerprint...{C.RESET}")
-            report["fingerprint"] = run_web_fingerprint(t)
-        else:
-            from modules.cb_userhunter_clone import search_username
-            print(f"{C.CYAN}[1/1] Username...{C.RESET}")
-            report["username"] = search_username(t)
-
-        from modules.html_report import save_html_report
-        out = save_html_report(report, "reconx_report")
-        print(f"\n{C.GREEN}  ✓ HTML: {out}{C.RESET}")
-        print(f"  {C.CYAN}Open: termux-open {out}{C.RESET}")
-
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
         import traceback
@@ -717,49 +371,35 @@ def html_report_menu():
     pause()
 
 
-# ============================================================
-# Full Recon
-# ============================================================
-
-def full_recon_menu():
+def fast_web_recon_menu():
+    """Fast Web Recon — skip subdomains + dirbuster."""
     clear()
     banner()
-    section("⚡ Full Recon (Auto-detect)")
+    section("⚡ Fast Web Recon")
 
-    print(f"  {C.GRAY}Auto-detects: phone/email/ip/domain/username{C.RESET}\n")
+    print(f"  {C.GRAY}Skips subdomains + dirbuster (faster){C.RESET}")
+    print(f"  {C.GRAY}Auto HTML + TXT + JSON reports{C.RESET}\n")
 
-    t = prompt("  Target")
+    t = prompt("  Domain")
     if not t:
         return
 
+    print(f"\n{C.YELLOW}  ⚡ Starting FAST web recon on {t}...{C.RESET}\n")
+
     try:
-        if "@" in t:
-            print(f"{C.GREEN}  → Email{C.RESET}\n")
-            from modules.email_osint import run_email_osint, print_email_report
-            r = run_email_osint(t)
-            print_email_report(r)
-        elif t.startswith("+") or (t.replace("-", "").isdigit() and len(t) > 6):
-            print(f"{C.GREEN}  → Phone{C.RESET}\n")
-            from modules.phone_osint import run_phone_osint, print_phone_report
-            r = run_phone_osint(t)
-            print_phone_report(r)
-        elif t.count(".") == 3 and all(p.isdigit() for p in t.split(".")):
-            print(f"{C.GREEN}  → IP{C.RESET}\n")
-            from modules.ip_osint import run_ip_osint, print_ip_report
-            r = run_ip_osint(t)
-            print_ip_report(r)
-        elif "." in t:
-            print(f"{C.GREEN}  → Domain{C.RESET}\n")
-            from modules.domain_osint import run_domain_osint, print_domain_report
-            r = run_domain_osint(t)
-            print_domain_report(r)
-        else:
-            print(f"{C.GREEN}  → Username{C.RESET}\n")
-            from modules.cb_userhunter_clone import search_username, print_report as p
-            r = search_username(t)
-            p(r)
+        from recon import run_recon
+        run_recon(
+            t,
+            deep=False,
+            save_json_flag=True,
+            save_html_report=True,
+            save_txt_report=True,
+            max_ips=2,
+        )
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
 
     pause()
 
@@ -774,7 +414,7 @@ def show_env():
     section("ℹ️ Environment")
 
     try:
-        from modules.env_detect import get_environment, get_env_label
+        from modules.utils.env_detect import get_environment, get_env_label
         env = get_environment()
 
         print(f"  {C.CYAN}Environment:{C.RESET}  {get_env_label(env)}")
@@ -782,27 +422,26 @@ def show_env():
         print(f"  {C.CYAN}Platform:   {C.RESET}  {env.get('platform')}")
         print(f"  {C.CYAN}Root:       {C.RESET}  {'YES' if env.get('is_root') else 'no'}")
 
-        print(f"\n  {C.BOLD}Available Modules:{C.RESET}")
+        print(f"\n  {C.BOLD}Core Engines:{C.RESET}")
+        for engine in ["cli.py", "recon.py"]:
+            path = BASE_DIR / engine
+            if path.exists():
+                print(f"    {C.GREEN}✓{C.RESET} {engine}")
+            else:
+                print(f"    {C.RED}✗{C.RESET} {engine}")
+
+        print(f"\n  {C.BOLD}Web Recon Modules:{C.RESET}")
         mods = [
-            ("phone_osint", "📱"),
-            ("cb_userhunter_clone", "👤"),
-            ("domain_osint", "🌐"),
-            ("ip_osint", "🌍"),
-            ("email_osint", "📧"),
-            ("metadata_osint", "🖼️ "),
-            ("github_recon", "🐙"),
-            ("breach_checker", "🔓"),
-            ("social_deep", "📱"),
-            ("social_media_osint", "📸"),
-            ("port_open_scan", "🔍"),
-            ("dns_deep", "🌐"),
-            ("email_harvester", "📧"),
-            ("subfinder_clone", "🌐"),
-            ("subdomain_enum", "🌐"),
-            ("web_fingerprint", "🌍"),
-            ("ssl_analyzer", "🔐"),
-            ("dir_buster", "📂"),
-            ("html_report", "📊"),
+            ("network.port_scan", "🔍"),
+            ("network.dns_deep", "🌐"),
+            ("network.ssl_analyzer", "🔐"),
+            ("web.domain_osint", "🌐"),
+            ("web.subdomain_enum", "🌐"),
+            ("web.subfinder_clone", "🌐"),
+            ("web.web_fingerprint", "🌍"),
+            ("web.dir_buster", "📂"),
+            ("report.html_report", "📊"),
+            ("utils.env_detect", "ℹ️ "),
         ]
 
         working = 0
@@ -811,8 +450,8 @@ def show_env():
                 __import__(f"modules.{m}")
                 print(f"    {C.GREEN}✓{C.RESET} {icon} {m}")
                 working += 1
-            except ImportError:
-                print(f"    {C.RED}✗{C.RESET} {icon} {m}")
+            except ImportError as e:
+                print(f"    {C.RED}✗{C.RESET} {icon} {m} ({e})")
 
         print(f"\n  {C.BOLD}Working: {working}/{len(mods)}{C.RESET}")
     except Exception as e:
@@ -826,42 +465,30 @@ def show_help():
     banner()
     section("❓ Help")
 
-    print(f"{C.BOLD}  ReconX v1.0.0 — 20 OSINT Tools{C.RESET}")
+    print(f"{C.BOLD}  ReconX v3.0.0 — Web Recon Toolkit{C.RESET}")
     print(f"  Zero external tools needed.")
     print(f"  Works on Termux, Kali, WSL.")
     print()
-    print(f"{C.BOLD}  Target OSINT:{C.RESET}")
-    print(f"  {C.CYAN}1{C.RESET}  Phone OSINT")
-    print(f"  {C.CYAN}2{C.RESET}  Username (CB-UserHunter, 100+ platforms)")
-    print(f"  {C.CYAN}3{C.RESET}  Domain OSINT")
-    print(f"  {C.CYAN}4{C.RESET}  IP OSINT (multi-source)")
-    print(f"  {C.CYAN}5{C.RESET}  Email OSINT")
-    print(f"  {C.CYAN}6{C.RESET}  Image Metadata (EXIF)")
-    print(f"  {C.CYAN}7{C.RESET}  GitHub Recon")
-    print(f"  {C.CYAN}8{C.RESET}  Breach Checker")
+    print(f"{C.BOLD}  Web Recon Modules:{C.RESET}")
+    print(f"  {C.CYAN}1{C.RESET}  Domain OSINT    — IPs, WHOIS, DNS records")
+    print(f"  {C.CYAN}2{C.RESET}  IP OSINT        — multi-source geolocation")
+    print(f"  {C.CYAN}3{C.RESET}  Port Scanner    — multi-threaded, banners, vuln hints")
+    print(f"  {C.CYAN}4{C.RESET}  DNS Deep        — DoH, SPF/DMARC, zone transfer")
+    print(f"  {C.CYAN}5{C.RESET}  Subdomains      — 7 passive sources + bruteforce")
+    print(f"  {C.CYAN}6{C.RESET}  Web Fingerprint — tech detection + security headers")
+    print(f"  {C.CYAN}7{C.RESET}  SSL/TLS         — cert, ciphers, grade A+ to F")
+    print(f"  {C.CYAN}8{C.RESET}  Dir Buster      — soft-404 aware, sensitivity scoring")
     print()
-    print(f"{C.BOLD}  Social Media:{C.RESET}")
-    print(f"  {C.CYAN}9{C.RESET}  Social Media Deep")
-    print(f"  {C.CYAN}10{C.RESET} Instagram & Facebook (Public)")
+    print(f"{C.BOLD}{C.GREEN}  Full Recon (recommended):{C.RESET}")
+    print(f"  {C.GREEN}9{C.RESET}  Full Web Recon  — 8 tools in parallel + HTML report")
+    print(f"  {C.GREEN}10{C.RESET} Fast Web Recon  — skip subs/dirs")
     print()
-    print(f"{C.BOLD}  Network:{C.RESET}")
-    print(f"  {C.CYAN}11{C.RESET} Port Scanner")
-    print(f"  {C.CYAN}12{C.RESET} DNS Deep Recon")
-    print()
-    print(f"{C.BOLD}  Web Recon:{C.RESET}")
-    print(f"  {C.CYAN}13{C.RESET} Email Harvester")
-    print(f"  {C.CYAN}14{C.RESET} Subdomain Enumerator")
-    print(f"  {C.CYAN}15{C.RESET} Web Fingerprint")
-    print(f"  {C.CYAN}16{C.RESET} SSL/TLS Analyzer")
-    print(f"  {C.CYAN}17{C.RESET} Directory Buster")
-    print()
-    print(f"{C.BOLD}  Combined:{C.RESET}")
-    print(f"  {C.CYAN}18{C.RESET} Job Scan (all-in-one)")
-    print(f"  {C.CYAN}19{C.RESET} CB-UserHunter Direct")
-    print(f"  {C.CYAN}20{C.RESET} Generate HTML Report")
+    print(f"{C.BOLD}  CLI usage:{C.RESET}")
+    print(f"  python recon.py example.com")
+    print(f"  python recon.py example.com --fast")
+    print(f"  python recon.py example.com --json")
     print()
     print(f"{C.BOLD}  Reports: {C.RESET}~/ReconX/outputs/")
-    print(f"{C.BOLD}  GitHub:  {C.RESET}https://github.com/jude84162-sys/ReconX")
 
     pause()
 
@@ -877,7 +504,7 @@ def show_outputs():
         pause()
         return
 
-    files = sorted(outputs.glob("*"), reverse=True)
+    files = sorted(outputs.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not files:
         print(f"  {C.YELLOW}Empty.{C.RESET}")
         pause()
@@ -887,7 +514,12 @@ def show_outputs():
     for f in files[:20]:
         size = f.stat().st_size
         mt = datetime.fromtimestamp(f.stat().st_mtime).strftime("%m-%d %H:%M")
-        print(f"  {C.CYAN}•{C.RESET} {f.name:<50} {size:>8} B  {mt}")
+        color = C.CYAN
+        if f.suffix == ".html":
+            color = C.GREEN
+        elif f.suffix == ".json":
+            color = C.YELLOW
+        print(f"  {color}•{C.RESET} {f.name:<50} {size:>8} B  {mt}")
 
     if len(files) > 20:
         print(f"  ... and {len(files) - 20} more")
@@ -907,7 +539,7 @@ def save_report(data, prefix="report"):
     fp = outputs / f"{prefix}_{ts}.json"
 
     data["_saved_at"] = datetime.now().isoformat()
-    data["_tool"] = "ReconX v1.0.0"
+    data["_tool"] = "ReconX v3.0.0"
 
     try:
         with open(fp, "w", encoding="utf-8") as f:

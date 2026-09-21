@@ -312,7 +312,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     if len(sys.argv) < 2:
-        print("Usage: python -m modules.port_open_scan <target> [spec]")
+        print("Usage: python -m modules.network.port_scan <target> [spec]")
         print()
         print("Specs: common, top100, top1000, web, db, windows, all,")
         print("       80-443, 80,443,8080")

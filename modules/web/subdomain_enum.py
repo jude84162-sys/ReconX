@@ -8,7 +8,7 @@ logger = logging.getLogger("ReconX.subdomain")
 
 
 try:
-    from modules.subfinder_clone import (
+    from modules.web.subfinder_clone import (
         run_subfinder_clone,
         print_subfinder_clone_report,
     )

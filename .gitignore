@@ -1,17 +1,34 @@
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
-.Python
-env/
-venv/
-.venv/
-outputs/*.json
-outputs/*.txt
+*.pyo
+
+# Backups
+*.bak
+*.backup
+*.old
+*.orig
+*~
+
+# Outputs (reports)
+outputs/
+all_in_one_report.json
 *.log
+
+# Cache
+_cache/
+maigret_data.json
+.cache/
+
+# Scripts (user-specific)
+_scripts/
+
+# OS
 .DS_Store
-*.swp
+Thumbs.db
+
+# IDE
 .vscode/
 .idea/
-*.bak
-*.tmp
+*.swp
