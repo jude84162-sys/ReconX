@@ -8,6 +8,9 @@
 [![Zero Deps](https://img.shields.io/badge/Dependencies-0-brightgreen.svg)]()
 [![CI](https://github.com/jude84162-sys/ReconX/actions/workflows/ci.yml/badge.svg)](https://github.com/jude84162-sys/ReconX/actions/workflows/ci.yml)
 [![Recon Test](https://github.com/jude84162-sys/ReconX/actions/workflows/recon-test.yml/badge.svg)](https://github.com/jude84162-sys/ReconX/actions/workflows/recon-test.yml)
+[![Release](https://img.shields.io/github/v/release/jude84162-sys/ReconX)](https://github.com/jude84162-sys/ReconX/releases)
+[![Downloads](https://img.shields.io/github/downloads/jude84162-sys/ReconX/total)](https://github.com/jude84162-sys/ReconX/releases)
+[![Stars](https://img.shields.io/github/stars/jude84162-sys/ReconX)](https://github.com/jude84162-sys/ReconX/stargazers)
 
 *15 web reconnaissance tools in one interface — pure recon, no exploitation.*
 
