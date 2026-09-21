@@ -69,7 +69,7 @@ def banner(target, deep=True):
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║                     ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                     ║
 ║                                                                  ║
-║           Comprehensive Web Recon  [{mode} MODE] v2              ║
+║           Comprehensive Web Recon  [{mode} MODE] v4              ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 
 {C.BOLD}  🎯 Target:{C.RESET} {C.YELLOW}{target}{C.RESET}
@@ -103,7 +103,7 @@ def _safe_step(name, fn, *args, **kwargs):
 # ============================================================
 
 def step_domain(target):
-    section(1, 8, "🌐 Domain OSINT")
+    section(1, 13, "🌐 Domain OSINT")
     try:
         from modules.web.domain_osint import run_domain_osint
         result = run_domain_osint(target, deep=False)
@@ -137,13 +137,13 @@ def step_domain(target):
 # ============================================================
 
 def step_ip_multi(ips, max_ips=3):
-    section(2, 8, f"🌍 IP OSINT (checking {min(len(ips), max_ips)} of {len(ips)})")
+    section(2, 13, f"🌍 IP OSINT (checking {min(len(ips), max_ips)} of {len(ips)})")
     if not ips:
         print(f"  {C.YELLOW}⏭ Skipped (no IP resolved){C.RESET}")
         return {"results": [], "consensus": {}}
 
     try:
-        from modules.target.ip_osint import run_ip_osint
+        from modules.network.ip_osint import run_ip_osint
 
         ips_to_check = ips[:max_ips]
         results = []
@@ -196,7 +196,7 @@ def step_ip_multi(ips, max_ips=3):
 # ============================================================
 
 def step_ports(primary_ip, fast=False):
-    section(3, 8, "🔍 Port Scanner")
+    section(3, 13, "🔍 Port Scanner")
     if not primary_ip:
         print(f"  {C.YELLOW}⏭ Skipped (no IP){C.RESET}")
         return {}
@@ -248,7 +248,7 @@ def step_ports(primary_ip, fast=False):
 # ============================================================
 
 def step_dns(target):
-    section(4, 8, "🌐 DNS Deep Recon")
+    section(4, 13, "🌐 DNS Deep Recon")
     try:
         from modules.network.dns_deep import run_dns_deep
         result = run_dns_deep(target)
@@ -291,7 +291,7 @@ def step_dns(target):
 # ============================================================
 
 def step_subdomains(target, deep=True):
-    section(5, 8, "🌐 Subdomain Enumeration")
+    section(5, 13, "🌐 Subdomain Enumeration")
     if not deep:
         print(f"  {C.YELLOW}⏭ Skipped (fast mode){C.RESET}")
         return {}
@@ -325,7 +325,7 @@ def step_subdomains(target, deep=True):
 # ============================================================
 
 def step_fingerprint(target):
-    section(6, 8, "🌍 Web Fingerprint")
+    section(6, 13, "🌍 Web Fingerprint")
     try:
         from modules.web.web_fingerprint import run_web_fingerprint
         result = run_web_fingerprint(target)
@@ -372,7 +372,7 @@ def step_fingerprint(target):
 # ============================================================
 
 def step_ssl(target):
-    section(7, 8, "🔐 SSL/TLS Analysis")
+    section(7, 13, "🔐 SSL/TLS Analysis")
     try:
         from modules.network.ssl_analyzer import run_ssl_analyzer
         result = run_ssl_analyzer(target)
@@ -430,7 +430,7 @@ def step_ssl(target):
 # ============================================================
 
 def step_dirs(target, deep=True):
-    section(8, 8, "📂 Directory Buster")
+    section(8, 13, "📂 Directory Buster")
     if not deep:
         print(f"  {C.YELLOW}⏭ Skipped (fast mode){C.RESET}")
         return {}
@@ -467,6 +467,111 @@ def step_dirs(target, deep=True):
 # Summary Builder
 # ============================================================
 
+
+
+# ============================================================
+# 9. Login Finder
+# ============================================================
+
+def step_login(target):
+    section(9, 13, "🔐 Login Finder")
+    try:
+        from modules.web.login_finder import run_login_finder
+        result = run_login_finder(target)
+
+        found = result.get("found", [])
+        print(f"  {C.GREEN}✓{C.RESET} Login pages found: {len(found)}")
+
+        for item in found[:10]:
+            conf = item["confidence"]
+            marker = "🟢" if conf >= 0.85 else "🟡" if conf >= 0.65 else "🔵"
+            print(f"      {marker} [{item['status']}] {item['url']} ({conf:.2f})")
+
+        return result
+    except Exception as e:
+        print(f"  {C.RED}✗ Login finder failed: {e}{C.RESET}")
+        return {}
+
+
+# ============================================================
+# 10. Register Finder
+# ============================================================
+
+def step_register(target):
+    section(10, 13, "📝 Register Finder")
+    try:
+        from modules.web.register_finder import run_register_finder
+        result = run_register_finder(target)
+
+        found = result.get("found", [])
+        print(f"  {C.GREEN}✓{C.RESET} Register pages found: {len(found)}")
+
+        for item in found[:10]:
+            conf = item["confidence"]
+            marker = "🟢" if conf >= 0.85 else "🟡" if conf >= 0.65 else "🔵"
+            print(f"      {marker} [{item['status']}] {item['url']} ({conf:.2f})")
+
+        return result
+    except Exception as e:
+        print(f"  {C.RED}✗ Register finder failed: {e}{C.RESET}")
+        return {}
+
+
+# ============================================================
+# 11. WAF Detector
+# ============================================================
+
+def step_waf(target):
+    section(11, 13, "🛡️  WAF Detector")
+    try:
+        from modules.web.waf_detector import run_waf_detector
+        result = run_waf_detector(target)
+
+        wafs = result.get("wafs_detected", [])
+        if wafs:
+            print(f"  {C.GREEN}✓{C.RESET} WAF detected: {len(wafs)}")
+            for w in wafs[:3]:
+                conf = w["confidence"]
+                marker = "🟢" if conf >= 0.80 else "🟡" if conf >= 0.50 else "🔵"
+                print(f"      {marker} {w['waf']} (confidence: {conf:.2f})")
+        else:
+            print(f"  {C.GRAY}•{C.RESET} No WAF detected")
+
+        blocked = result.get("blocked_payloads", 0)
+        if blocked > 0:
+            print(f"  {C.YELLOW}⚠ {blocked} suspicious payloads blocked{C.RESET}")
+
+        return result
+    except Exception as e:
+        print(f"  {C.RED}✗ WAF detector failed: {e}{C.RESET}")
+        return {}
+
+
+# ============================================================
+# 12. Param Finder
+# ============================================================
+
+def step_params(target):
+    section(12, 13, "🔗 Parameter Finder")
+    try:
+        from modules.web.param_finder import run_param_finder
+        result = run_param_finder(target)
+
+        accepted = result.get("accepted", [])
+        print(f"  {C.GREEN}✓{C.RESET} Accepted parameters: {len(accepted)}")
+
+        for item in accepted[:10]:
+            conf = item["confidence"]
+            marker = "🟢" if conf >= 0.80 else "🟡" if conf >= 0.60 else "🔵"
+            reflected = " ⚠ reflected" if item.get("reflected") else ""
+            print(f"      {marker} {item['param']} ({conf:.2f}){reflected}")
+
+        return result
+    except Exception as e:
+        print(f"  {C.RED}✗ Param finder failed: {e}{C.RESET}")
+        return {}
+
+
 def build_summary(target, steps):
     domain = steps.get("domain", {})
     ip = steps.get("ip", {})
@@ -476,6 +581,10 @@ def build_summary(target, steps):
     fp = steps.get("fingerprint", {})
     ssl_r = steps.get("ssl", {})
     dirs = steps.get("dir_bust", {})
+    login = steps.get("login", {})
+    register = steps.get("register", {})
+    waf = steps.get("waf", {})
+    params = steps.get("params", {})
 
     indicators = []
 
@@ -547,6 +656,45 @@ def build_summary(target, steps):
             "detail": "Target behind proxy/VPN",
         })
 
+    # Login pages exposed
+    login_found = login.get("found", [])
+    for lg in login_found:
+        if lg.get("confidence", 0) >= 0.85:
+            indicators.append({
+                "severity": "LOW",
+                "category": "login",
+                "detail": f"Login page found: {lg['url']}",
+            })
+
+    # Register pages exposed
+    register_found = register.get("found", [])
+    for rg in register_found:
+        if rg.get("confidence", 0) >= 0.85:
+            indicators.append({
+                "severity": "LOW",
+                "category": "register",
+                "detail": f"Registration page found: {rg['url']}",
+            })
+
+    # WAF detected
+    wafs = waf.get("wafs_detected", [])
+    if wafs:
+        top_waf = wafs[0]
+        indicators.append({
+            "severity": "INFO",
+            "category": "waf",
+            "detail": f"WAF detected: {top_waf['waf']} ({top_waf['confidence']:.2f})",
+        })
+
+    # Reflected parameters (potential XSS surface)
+    reflected_params = [p for p in params.get("accepted", []) if p.get("reflected")]
+    for rp in reflected_params[:5]:
+        indicators.append({
+            "severity": "MEDIUM",
+            "category": "params",
+            "detail": f"Reflected parameter: {rp['param']} (potential XSS)",
+        })
+
     sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for ind in indicators:
         sev_counts[ind["severity"]] = sev_counts.get(ind["severity"], 0) + 1
@@ -591,6 +739,13 @@ def build_summary(target, steps):
         "directories": {
             "checked": dirs.get("total_checked", 0),
             "found": len(dirs.get("found", [])),
+        },
+        "web": {
+            "login_pages": len(login.get("found", [])),
+            "register_pages": len(register.get("found", [])),
+            "waf": [w["waf"] for w in waf.get("wafs_detected", [])][:3],
+            "accepted_params": len(params.get("accepted", [])),
+            "reflected_params": len([p for p in params.get("accepted", []) if p.get("reflected")]),
         },
         "risk": {
             "severity_counts": sev_counts,
@@ -647,6 +802,17 @@ def print_summary(summary):
     print(f"    Checked:         {summary['directories']['checked']}")
     print(f"    Found:           {summary['directories']['found']}")
 
+    # Web recon additions
+    web = summary.get("web", {})
+    if web:
+        print(f"\n  {C.BOLD}{C.MAGENTA}🔐 WEB DISCOVERY{C.RESET}")
+        print(f"    Login pages:     {web.get('login_pages', 0)}")
+        print(f"    Register pages:  {web.get('register_pages', 0)}")
+        print(f"    Accepted params: {web.get('accepted_params', 0)}")
+        print(f"    Reflected params: {web.get('reflected_params', 0)}")
+        wafs = web.get("waf", [])
+        print(f"    WAF:             {', '.join(wafs) if wafs else 'none detected'}")
+
     risk = summary["risk"]
     counts = risk["severity_counts"]
     print(f"\n  {C.BOLD}{C.MAGENTA}⚠ RISK SUMMARY{C.RESET}")
@@ -700,6 +866,10 @@ def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3):
         "fingerprint": (step_fingerprint, (target,), {}),
         "ssl":         (step_ssl, (target,), {}),
         "dir_bust":    (step_dirs, (target,), {"deep": deep}),
+        "login":       (step_login, (target,), {}),
+        "register":    (step_register, (target,), {}),
+        "waf":         (step_waf, (target,), {}),
+        "params":      (step_params, (target,), {}),
     }
 
     print(f"\n{C.CYAN}{'═' * 70}{C.RESET}")

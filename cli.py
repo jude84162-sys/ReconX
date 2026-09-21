@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ReconX - Interactive CLI v3 (Web Recon Only)"""
+"""ReconX - Interactive CLI v4 (Web Recon — 15 tools)"""
 
 import os
 import sys
@@ -52,8 +52,8 @@ def banner():
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██╔╝ ██╗             ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝             ║
 ║                                                                  ║
-║              Comprehensive Web Recon  v3.0.0                     ║
-║                        10 Tools Available                        ║
+║              Comprehensive Web Recon  v4.0.0                     ║
+║                        15 Tools Available                        ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 """)
 
@@ -71,19 +71,28 @@ def main_menu():
         clear()
         banner()
 
-        print(f"{C.BOLD}{C.MAGENTA}  ── Web Recon ──{C.RESET}")
+        print(f"{C.BOLD}{C.MAGENTA}  ── Recon Modules ──{C.RESET}")
         print(f"  {C.CYAN}[1]{C.RESET}  🌐 Domain OSINT")
         print(f"  {C.CYAN}[2]{C.RESET}  🌍 IP OSINT (multi-source)")
         print(f"  {C.CYAN}[3]{C.RESET}  🔍 Port Scanner")
         print(f"  {C.CYAN}[4]{C.RESET}  🌐 DNS Deep Recon")
         print(f"  {C.CYAN}[5]{C.RESET}  🌐 Subdomain Enumerator")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Web Discovery ──{C.RESET}")
         print(f"  {C.CYAN}[6]{C.RESET}  🌍 Web Fingerprint")
-        print(f"  {C.CYAN}[7]{C.RESET}  🔐 SSL/TLS Analyzer")
-        print(f"  {C.CYAN}[8]{C.RESET}  📂 Directory Buster")
+        print(f"  {C.CYAN}[7]{C.RESET}  📂 Directory Buster")
+        print(f"  {C.CYAN}[8]{C.RESET}  🔐 Login Finder")
+        print(f"  {C.CYAN}[9]{C.RESET}  📝 Register Finder")
+        print(f"  {C.CYAN}[10]{C.RESET} 🔗 Parameter Finder")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Security & Monitoring ──{C.RESET}")
+        print(f"  {C.CYAN}[11]{C.RESET} 🛡️  WAF Detector")
+        print(f"  {C.CYAN}[12]{C.RESET} 👁️  Web Monitor")
+        print(f"  {C.CYAN}[13]{C.RESET} 🔐 SSL/TLS Analyzer")
         print()
         print(f"{C.BOLD}{C.GREEN}  ── Full Recon (recommended) ──{C.RESET}")
-        print(f"  {C.GREEN}[9]{C.RESET}  🎯 Full Web Recon   (parallel, 8 tools)")
-        print(f"  {C.GREEN}[10]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
+        print(f"  {C.GREEN}[14]{C.RESET} 🎯 Full Web Recon   (parallel, 12 tools)")
+        print(f"  {C.GREEN}[15]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
         print()
         print(f"{C.BOLD}{C.MAGENTA}  ── Actions ──{C.RESET}")
         print(f"  {C.GREEN}[i]{C.RESET}  ℹ️  Environment")
@@ -101,10 +110,15 @@ def main_menu():
             "4": dns_menu,
             "5": subdomain_menu,
             "6": web_fingerprint_menu,
-            "7": ssl_analyzer_menu,
-            "8": dir_buster_menu,
-            "9": full_web_recon_menu,
-            "10": fast_web_recon_menu,
+            "7": dir_buster_menu,
+            "8": login_finder_menu,
+            "9": register_finder_menu,
+            "10": param_finder_menu,
+            "11": waf_detector_menu,
+            "12": web_monitor_menu,
+            "13": ssl_analyzer_menu,
+            "14": full_web_recon_menu,
+            "15": fast_web_recon_menu,
             "i": show_env,
             "h": show_help,
             "o": show_outputs,
@@ -121,7 +135,7 @@ def main_menu():
 
 
 # ============================================================
-# Web Recon Handlers
+# Recon Modules (1-5)
 # ============================================================
 
 def domain_menu():
@@ -157,13 +171,16 @@ def ip_menu():
         return
 
     try:
-        from modules.target.ip_osint import run_ip_osint, print_ip_report
+        import sys
+        sys.path.insert(0, str(BASE_DIR / "_archive"))
+        from modules.network.ip_osint import run_ip_osint, print_ip_report
         r = run_ip_osint(ip)
         print_ip_report(r)
         if confirm("  Save?"):
             save_report({"ip": r}, "ip")
     except ImportError:
-        print(f"{C.RED}  ✗ IP OSINT module moved to archive{C.RESET}")
+        print(f"{C.YELLOW}  ⚠ IP OSINT module not available{C.RESET}")
+        print(f"{C.GRAY}  (was moved to archive){C.RESET}")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
 
@@ -234,8 +251,6 @@ def dns_menu():
             save_report({"dns_deep": r}, "dns_deep")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
-        import traceback
-        traceback.print_exc()
 
     pause()
 
@@ -265,6 +280,10 @@ def subdomain_menu():
     pause()
 
 
+# ============================================================
+# Web Discovery (6-10)
+# ============================================================
+
 def web_fingerprint_menu():
     clear()
     banner()
@@ -280,27 +299,6 @@ def web_fingerprint_menu():
         print_fingerprint_report(r)
         if confirm("  Save?"):
             save_report({"fingerprint": r}, "fingerprint")
-    except Exception as e:
-        print(f"{C.RED}  Error: {e}{C.RESET}")
-
-    pause()
-
-
-def ssl_analyzer_menu():
-    clear()
-    banner()
-    section("🔐 SSL/TLS Analyzer")
-
-    h = prompt("  Hostname")
-    if not h:
-        return
-
-    try:
-        from modules.network.ssl_analyzer import run_ssl_analyzer, print_ssl_report
-        r = run_ssl_analyzer(h)
-        print_ssl_report(r)
-        if confirm("  Save?"):
-            save_report({"ssl": r}, "ssl")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
 
@@ -328,18 +326,157 @@ def dir_buster_menu():
     pause()
 
 
+def login_finder_menu():
+    clear()
+    banner()
+    section("🔐 Login Finder")
+
+    print(f"  {C.GRAY}Search 60+ login/admin paths (recon only){C.RESET}\n")
+
+    u = prompt("  URL or domain")
+    if not u:
+        return
+
+    try:
+        from modules.web.login_finder import run_login_finder, print_login_finder_report
+        r = run_login_finder(u)
+        print_login_finder_report(r)
+        if confirm("  Save?"):
+            save_report({"login_finder": r}, "login_finder")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+
+    pause()
+
+
+def register_finder_menu():
+    clear()
+    banner()
+    section("📝 Register Finder")
+
+    print(f"  {C.GRAY}Search 55+ register/signup paths (recon only){C.RESET}\n")
+
+    u = prompt("  URL or domain")
+    if not u:
+        return
+
+    try:
+        from modules.web.register_finder import run_register_finder, print_register_finder_report
+        r = run_register_finder(u)
+        print_register_finder_report(r)
+        if confirm("  Save?"):
+            save_report({"register_finder": r}, "register_finder")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+
+    pause()
+
+
+def param_finder_menu():
+    clear()
+    banner()
+    section("🔗 Parameter Finder")
+
+    print(f"  {C.GRAY}Test 101 parameters (recon only){C.RESET}\n")
+
+    u = prompt("  URL with params (e.g. https://example.com/?id=1)")
+    if not u:
+        return
+
+    try:
+        from modules.web.param_finder import run_param_finder, print_param_finder_report
+        r = run_param_finder(u)
+        print_param_finder_report(r)
+        if confirm("  Save?"):
+            save_report({"param_finder": r}, "param_finder")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+
+    pause()
+
+
 # ============================================================
-# Full Recon (delegates to recon.py)
+# Security & Monitoring (11-13)
+# ============================================================
+
+def waf_detector_menu():
+    clear()
+    banner()
+    section("🛡️  WAF Detector")
+
+    print(f"  {C.GRAY}Detect 17 WAFs (Cloudflare, Akamai, Sucuri, etc.){C.RESET}\n")
+
+    u = prompt("  URL or domain")
+    if not u:
+        return
+
+    try:
+        from modules.web.waf_detector import run_waf_detector, print_waf_report
+        r = run_waf_detector(u)
+        print_waf_report(r)
+        if confirm("  Save?"):
+            save_report({"waf_detector": r}, "waf_detector")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+
+    pause()
+
+
+def web_monitor_menu():
+    clear()
+    banner()
+    section("👁️  Web Monitor")
+
+    print(f"  {C.GRAY}Detect changes over time (run twice){C.RESET}")
+    print(f"  {C.GRAY}Baselines saved to ~/.reconx/monitor/{C.RESET}\n")
+
+    u = prompt("  URL")
+    if not u:
+        return
+
+    try:
+        from modules.web.web_monitor import run_web_monitor, print_web_monitor_report
+        r = run_web_monitor(u)
+        print_web_monitor_report(r)
+        if confirm("  Save?"):
+            save_report({"web_monitor": r}, "web_monitor")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+
+    pause()
+
+
+def ssl_analyzer_menu():
+    clear()
+    banner()
+    section("🔐 SSL/TLS Analyzer")
+
+    h = prompt("  Hostname")
+    if not h:
+        return
+
+    try:
+        from modules.network.ssl_analyzer import run_ssl_analyzer, print_ssl_report
+        r = run_ssl_analyzer(h)
+        print_ssl_report(r)
+        if confirm("  Save?"):
+            save_report({"ssl": r}, "ssl")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+
+    pause()
+
+
+# ============================================================
+# Full Recon (14-15)
 # ============================================================
 
 def full_web_recon_menu():
-    """Full Web Recon — uses recon.py v3 (parallel)."""
     clear()
     banner()
     section("🎯 Full Web Recon")
 
-    print(f"  {C.GRAY}8 tools in parallel: domain, ip, ports, dns, subs, fp, ssl, dirs{C.RESET}")
-    print(f"  {C.GRAY}Auto HTML + TXT + JSON reports{C.RESET}\n")
+    print(f"  {C.GRAY}12 tools in parallel + auto HTML/TXT/JSON{C.RESET}\n")
 
     t = prompt("  Domain")
     if not t:
@@ -355,14 +492,8 @@ def full_web_recon_menu():
 
     try:
         from recon import run_recon
-        run_recon(
-            t,
-            deep=True,
-            save_json_flag=True,
-            save_html_report=True,
-            save_txt_report=True,
-            max_ips=max_ips,
-        )
+        run_recon(t, deep=True, save_json_flag=True,
+                  save_html_report=True, save_txt_report=True, max_ips=max_ips)
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
         import traceback
@@ -372,13 +503,11 @@ def full_web_recon_menu():
 
 
 def fast_web_recon_menu():
-    """Fast Web Recon — skip subdomains + dirbuster."""
     clear()
     banner()
     section("⚡ Fast Web Recon")
 
-    print(f"  {C.GRAY}Skips subdomains + dirbuster (faster){C.RESET}")
-    print(f"  {C.GRAY}Auto HTML + TXT + JSON reports{C.RESET}\n")
+    print(f"  {C.GRAY}Skip subdomains + dirbuster{C.RESET}\n")
 
     t = prompt("  Domain")
     if not t:
@@ -388,14 +517,8 @@ def fast_web_recon_menu():
 
     try:
         from recon import run_recon
-        run_recon(
-            t,
-            deep=False,
-            save_json_flag=True,
-            save_html_report=True,
-            save_txt_report=True,
-            max_ips=2,
-        )
+        run_recon(t, deep=False, save_json_flag=True,
+                  save_html_report=True, save_txt_report=True, max_ips=2)
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
         import traceback
@@ -440,6 +563,11 @@ def show_env():
             ("web.subfinder_clone", "🌐"),
             ("web.web_fingerprint", "🌍"),
             ("web.dir_buster", "📂"),
+            ("web.login_finder", "🔐"),
+            ("web.register_finder", "📝"),
+            ("web.param_finder", "🔗"),
+            ("web.waf_detector", "🛡️ "),
+            ("web.web_monitor", "👁️ "),
             ("report.html_report", "📊"),
             ("utils.env_detect", "ℹ️ "),
         ]
@@ -450,8 +578,8 @@ def show_env():
                 __import__(f"modules.{m}")
                 print(f"    {C.GREEN}✓{C.RESET} {icon} {m}")
                 working += 1
-            except ImportError as e:
-                print(f"    {C.RED}✗{C.RESET} {icon} {m} ({e})")
+            except ImportError:
+                print(f"    {C.RED}✗{C.RESET} {icon} {m}")
 
         print(f"\n  {C.BOLD}Working: {working}/{len(mods)}{C.RESET}")
     except Exception as e:
@@ -465,28 +593,35 @@ def show_help():
     banner()
     section("❓ Help")
 
-    print(f"{C.BOLD}  ReconX v3.0.0 — Web Recon Toolkit{C.RESET}")
-    print(f"  Zero external tools needed.")
-    print(f"  Works on Termux, Kali, WSL.")
+    print(f"{C.BOLD}  ReconX v4.0.0 — Web Recon Toolkit (15 tools){C.RESET}")
+    print(f"  Zero external tools needed. Termux, Kali, WSL.")
     print()
-    print(f"{C.BOLD}  Web Recon Modules:{C.RESET}")
-    print(f"  {C.CYAN}1{C.RESET}  Domain OSINT    — IPs, WHOIS, DNS records")
-    print(f"  {C.CYAN}2{C.RESET}  IP OSINT        — multi-source geolocation")
-    print(f"  {C.CYAN}3{C.RESET}  Port Scanner    — multi-threaded, banners, vuln hints")
-    print(f"  {C.CYAN}4{C.RESET}  DNS Deep        — DoH, SPF/DMARC, zone transfer")
-    print(f"  {C.CYAN}5{C.RESET}  Subdomains      — 7 passive sources + bruteforce")
-    print(f"  {C.CYAN}6{C.RESET}  Web Fingerprint — tech detection + security headers")
-    print(f"  {C.CYAN}7{C.RESET}  SSL/TLS         — cert, ciphers, grade A+ to F")
-    print(f"  {C.CYAN}8{C.RESET}  Dir Buster      — soft-404 aware, sensitivity scoring")
+    print(f"{C.BOLD}  Recon Modules:{C.RESET}")
+    print(f"  {C.CYAN}1{C.RESET}  Domain OSINT")
+    print(f"  {C.CYAN}2{C.RESET}  IP OSINT")
+    print(f"  {C.CYAN}3{C.RESET}  Port Scanner")
+    print(f"  {C.CYAN}4{C.RESET}  DNS Deep")
+    print(f"  {C.CYAN}5{C.RESET}  Subdomain Enumerator")
     print()
-    print(f"{C.BOLD}{C.GREEN}  Full Recon (recommended):{C.RESET}")
-    print(f"  {C.GREEN}9{C.RESET}  Full Web Recon  — 8 tools in parallel + HTML report")
-    print(f"  {C.GREEN}10{C.RESET} Fast Web Recon  — skip subs/dirs")
+    print(f"{C.BOLD}  Web Discovery:{C.RESET}")
+    print(f"  {C.CYAN}6{C.RESET}  Web Fingerprint")
+    print(f"  {C.CYAN}7{C.RESET}  Directory Buster")
+    print(f"  {C.CYAN}8{C.RESET}  Login Finder")
+    print(f"  {C.CYAN}9{C.RESET}  Register Finder")
+    print(f"  {C.CYAN}10{C.RESET} Parameter Finder")
+    print()
+    print(f"{C.BOLD}  Security & Monitoring:{C.RESET}")
+    print(f"  {C.CYAN}11{C.RESET} WAF Detector")
+    print(f"  {C.CYAN}12{C.RESET} Web Monitor")
+    print(f"  {C.CYAN}13{C.RESET} SSL/TLS Analyzer")
+    print()
+    print(f"{C.BOLD}{C.GREEN}  Full Recon:{C.RESET}")
+    print(f"  {C.GREEN}14{C.RESET} Full Web Recon (parallel)")
+    print(f"  {C.GREEN}15{C.RESET} Fast Web Recon")
     print()
     print(f"{C.BOLD}  CLI usage:{C.RESET}")
     print(f"  python recon.py example.com")
     print(f"  python recon.py example.com --fast")
-    print(f"  python recon.py example.com --json")
     print()
     print(f"{C.BOLD}  Reports: {C.RESET}~/ReconX/outputs/")
 
@@ -539,7 +674,7 @@ def save_report(data, prefix="report"):
     fp = outputs / f"{prefix}_{ts}.json"
 
     data["_saved_at"] = datetime.now().isoformat()
-    data["_tool"] = "ReconX v3.0.0"
+    data["_tool"] = "ReconX v4.0.0"
 
     try:
         with open(fp, "w", encoding="utf-8") as f:
