@@ -90,6 +90,9 @@ def main_menu():
         print(f"  {C.CYAN}[12]{C.RESET} 👁️  Web Monitor")
         print(f"  {C.CYAN}[13]{C.RESET} 🔐 SSL/TLS Analyzer")
         print()
+        print(f"{C.BOLD}{C.RED}  ── Vulnerability Scan (active) ──{C.RESET}")
+        print(f"  {C.RED}[16]{C.RESET} 🎯 DIRB Content Scan")
+        print()
         print(f"{C.BOLD}{C.GREEN}  ── Full Recon (recommended) ──{C.RESET}")
         print(f"  {C.GREEN}[14]{C.RESET} 🎯 Full Web Recon   (parallel, 12 tools)")
         print(f"  {C.GREEN}[15]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
@@ -117,6 +120,7 @@ def main_menu():
             "11": waf_detector_menu,
             "12": web_monitor_menu,
             "13": ssl_analyzer_menu,
+            "16": dirb_menu,
             "14": full_web_recon_menu,
             "15": fast_web_recon_menu,
             "i": show_env,
@@ -470,6 +474,73 @@ def ssl_analyzer_menu():
 # ============================================================
 # Full Recon (14-15)
 # ============================================================
+
+
+
+def dirb_menu():
+    clear()
+    banner()
+    section("🎯 DIRB Content Scan")
+
+    print(f"  {C.RED}⚠ Active scan — use only on authorized targets{C.RESET}\n")
+
+    u = prompt("  URL (e.g. https://example.com)")
+    if not u:
+        return
+
+    try:
+        from modules.vuln.dirb_engine import (
+            run_dirb, print_dirb_report, get_wordlists, is_dirb_available,
+        )
+
+        if not is_dirb_available():
+            print(f"{C.RED}  ✗ dirb not installed{C.RESET}")
+            print(f"{C.GRAY}  Install: sudo apt install dirb{C.RESET}")
+            pause()
+            return
+
+        # Optional wordlist
+        wordlists = get_wordlists()
+        if wordlists:
+            print(f"\n  {C.BOLD}Available wordlists:{C.RESET}")
+            names = list(wordlists.keys())
+            for i, name in enumerate(names[:10], 1):
+                print(f"  {C.CYAN}[{i}]{C.RESET} {name}")
+
+            choice = prompt("\n  Wordlist [default: common.txt]", default="")
+            wl = None
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(names):
+                    wl = wordlists[names[idx]]
+            elif choice:
+                wl = wordlists.get(choice)
+
+            timeout = prompt("  Timeout (seconds)", default="300")
+            try:
+                timeout = int(timeout)
+            except ValueError:
+                timeout = 300
+        else:
+            wl = None
+            timeout = 300
+
+        print(f"\n{C.YELLOW}  ⚡ Running DIRB on {u}...{C.RESET}\n")
+        r = run_dirb(u, wordlist=wl, timeout=timeout, verbose=True)
+        print_dirb_report(r)
+
+        if confirm("  Save JSON report?"):
+            from modules.vuln.dirb_engine import save_dirb_report
+            out = save_dirb_report(r, "outputs")
+            print(f"{C.GREEN}  ✓ Saved: {out}{C.RESET}")
+
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
 
 def full_web_recon_menu():
     clear()

@@ -69,7 +69,7 @@ def banner(target, deep=True):
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║                     ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                     ║
 ║                                                                  ║
-║           Comprehensive Web Recon  [{mode} MODE] v4              ║
+║           Comprehensive Web Recon  [{mode} MODE] v4.1              ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 
 {C.BOLD}  🎯 Target:{C.RESET} {C.YELLOW}{target}{C.RESET}
@@ -103,7 +103,7 @@ def _safe_step(name, fn, *args, **kwargs):
 # ============================================================
 
 def step_domain(target):
-    section(1, 13, "🌐 Domain OSINT")
+    section(1, 14, "🌐 Domain OSINT")
     try:
         from modules.web.domain_osint import run_domain_osint
         result = run_domain_osint(target, deep=False)
@@ -137,7 +137,7 @@ def step_domain(target):
 # ============================================================
 
 def step_ip_multi(ips, max_ips=3):
-    section(2, 13, f"🌍 IP OSINT (checking {min(len(ips), max_ips)} of {len(ips)})")
+    section(2, 14, f"🌍 IP OSINT (checking {min(len(ips), max_ips)} of {len(ips)})")
     if not ips:
         print(f"  {C.YELLOW}⏭ Skipped (no IP resolved){C.RESET}")
         return {"results": [], "consensus": {}}
@@ -196,7 +196,7 @@ def step_ip_multi(ips, max_ips=3):
 # ============================================================
 
 def step_ports(primary_ip, fast=False):
-    section(3, 13, "🔍 Port Scanner")
+    section(3, 14, "🔍 Port Scanner")
     if not primary_ip:
         print(f"  {C.YELLOW}⏭ Skipped (no IP){C.RESET}")
         return {}
@@ -248,7 +248,7 @@ def step_ports(primary_ip, fast=False):
 # ============================================================
 
 def step_dns(target):
-    section(4, 13, "🌐 DNS Deep Recon")
+    section(4, 14, "🌐 DNS Deep Recon")
     try:
         from modules.network.dns_deep import run_dns_deep
         result = run_dns_deep(target)
@@ -291,7 +291,7 @@ def step_dns(target):
 # ============================================================
 
 def step_subdomains(target, deep=True):
-    section(5, 13, "🌐 Subdomain Enumeration")
+    section(5, 14, "🌐 Subdomain Enumeration")
     if not deep:
         print(f"  {C.YELLOW}⏭ Skipped (fast mode){C.RESET}")
         return {}
@@ -325,7 +325,7 @@ def step_subdomains(target, deep=True):
 # ============================================================
 
 def step_fingerprint(target):
-    section(6, 13, "🌍 Web Fingerprint")
+    section(6, 14, "🌍 Web Fingerprint")
     try:
         from modules.web.web_fingerprint import run_web_fingerprint
         result = run_web_fingerprint(target)
@@ -372,7 +372,7 @@ def step_fingerprint(target):
 # ============================================================
 
 def step_ssl(target):
-    section(7, 13, "🔐 SSL/TLS Analysis")
+    section(7, 14, "🔐 SSL/TLS Analysis")
     try:
         from modules.network.ssl_analyzer import run_ssl_analyzer
         result = run_ssl_analyzer(target)
@@ -430,7 +430,7 @@ def step_ssl(target):
 # ============================================================
 
 def step_dirs(target, deep=True):
-    section(8, 13, "📂 Directory Buster")
+    section(8, 14, "📂 Directory Buster")
     if not deep:
         print(f"  {C.YELLOW}⏭ Skipped (fast mode){C.RESET}")
         return {}
@@ -474,7 +474,7 @@ def step_dirs(target, deep=True):
 # ============================================================
 
 def step_login(target):
-    section(9, 13, "🔐 Login Finder")
+    section(9, 14, "🔐 Login Finder")
     try:
         from modules.web.login_finder import run_login_finder
         result = run_login_finder(target)
@@ -498,7 +498,7 @@ def step_login(target):
 # ============================================================
 
 def step_register(target):
-    section(10, 13, "📝 Register Finder")
+    section(10, 14, "📝 Register Finder")
     try:
         from modules.web.register_finder import run_register_finder
         result = run_register_finder(target)
@@ -522,7 +522,7 @@ def step_register(target):
 # ============================================================
 
 def step_waf(target):
-    section(11, 13, "🛡️  WAF Detector")
+    section(11, 14, "🛡️  WAF Detector")
     try:
         from modules.web.waf_detector import run_waf_detector
         result = run_waf_detector(target)
@@ -552,7 +552,7 @@ def step_waf(target):
 # ============================================================
 
 def step_params(target):
-    section(12, 13, "🔗 Parameter Finder")
+    section(12, 14, "🔗 Parameter Finder")
     try:
         from modules.web.param_finder import run_param_finder
         result = run_param_finder(target)
@@ -572,6 +572,62 @@ def step_params(target):
         return {}
 
 
+
+
+# ============================================================
+# 14. DIRB Content Scan
+# ============================================================
+
+def step_dirb_engine(target, deep=True):
+    section(14, 14, "🎯 DIRB Content Scan")
+    if not deep:
+        print(f"  {C.YELLOW}⏭ Skipped (fast mode){C.RESET}")
+        return {}
+
+    try:
+        from modules.vuln.dirb_engine import is_dirb_available, run_dirb
+
+        if not is_dirb_available():
+            print(f"  {C.YELLOW}⚠ DIRB not installed (sudo apt install dirb){C.RESET}")
+            return {"available": False, "error": "not_installed"}
+
+        base_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
+        print(f"  [*] Running DIRB on {base_url} (timeout 180s)...")
+
+        result = run_dirb(base_url, timeout=180, verbose=False)
+
+        findings = result.get("findings", [])
+        summary = result.get("summary", {})
+
+        if result.get("error") and not findings:
+            print(f"  {C.YELLOW}⚠ DIRB error: {result['error']}{C.RESET}")
+            return result
+
+        by_sev = summary.get("by_severity", {})
+        print(f"  {C.GREEN}✓{C.RESET} Paths found:  {len(findings)}")
+        if by_sev:
+            icons = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪"}
+            parts = []
+            for sev in ["critical", "high", "medium", "low", "info"]:
+                if sev in by_sev:
+                    parts.append(f"{icons[sev]}{by_sev[sev]}")
+            print(f"      {' '.join(parts)}")
+
+        # Show top findings
+        for f in findings[:10]:
+            icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪"}.get(
+                f.get("severity", "info"), "⚪"
+            )
+            print(f"      {icon} [{f['status']}] {f['path']}")
+
+        return result
+
+    except Exception as e:
+        print(f"  {C.RED}✗ DIRB failed: {e}{C.RESET}")
+        return {}
+
+
+
 def build_summary(target, steps):
     domain = steps.get("domain", {})
     ip = steps.get("ip", {})
@@ -585,6 +641,7 @@ def build_summary(target, steps):
     register = steps.get("register", {})
     waf = steps.get("waf", {})
     params = steps.get("params", {})
+    dirb = steps.get("dirb", {})
 
     indicators = []
 
@@ -695,6 +752,17 @@ def build_summary(target, steps):
             "detail": f"Reflected parameter: {rp['param']} (potential XSS)",
         })
 
+    # DIRB findings
+    dirb_sev_map = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
+    for df in dirb.get("findings", []):
+        sev = dirb_sev_map.get(df.get("severity"))
+        if sev:
+            indicators.append({
+                "severity": sev,
+                "category": "dirb",
+                "detail": f"Exposed path: {df.get('path', '?')} ({df.get('description', '')})",
+            })
+
     sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for ind in indicators:
         sev_counts[ind["severity"]] = sev_counts.get(ind["severity"], 0) + 1
@@ -746,6 +814,10 @@ def build_summary(target, steps):
             "waf": [w["waf"] for w in waf.get("wafs_detected", [])][:3],
             "accepted_params": len(params.get("accepted", [])),
             "reflected_params": len([p for p in params.get("accepted", []) if p.get("reflected")]),
+        },
+        "dirb": {
+            "total": dirb.get("summary", {}).get("total", 0),
+            "by_severity": dirb.get("summary", {}).get("by_severity", {}),
         },
         "risk": {
             "severity_counts": sev_counts,
@@ -813,6 +885,17 @@ def print_summary(summary):
         wafs = web.get("waf", [])
         print(f"    WAF:             {', '.join(wafs) if wafs else 'none detected'}")
 
+    # DIRB
+    dirb = summary.get("dirb", {})
+    if dirb.get("total", 0) > 0:
+        print(f"\n  {C.BOLD}{C.MAGENTA}🎯 DIRB{C.RESET}")
+        print(f"    Paths found:     {dirb.get('total', 0)}")
+        by_sev = dirb.get("by_severity", {})
+        for sev in ["critical", "high", "medium", "low", "info"]:
+            if sev in by_sev:
+                icons = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪"}
+                print(f"    {icons[sev]} {sev.capitalize():<10} {by_sev[sev]}")
+
     risk = summary["risk"]
     counts = risk["severity_counts"]
     print(f"\n  {C.BOLD}{C.MAGENTA}⚠ RISK SUMMARY{C.RESET}")
@@ -870,6 +953,7 @@ def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3):
         "register":    (step_register, (target,), {}),
         "waf":         (step_waf, (target,), {}),
         "params":      (step_params, (target,), {}),
+        "dirb":        (step_dirb_engine, (target,), {"deep": deep}),
     }
 
     print(f"\n{C.CYAN}{'═' * 70}{C.RESET}")
