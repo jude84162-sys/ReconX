@@ -1,45 +1,65 @@
 # 🔍 ReconX
 
-**Comprehensive OSINT Toolkit** — Cross-platform reconnaissance for Termux, Kali, and WSL.
+**Comprehensive Web Recon Toolkit** — Cross-platform reconnaissance for Termux, Kali, and WSL.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Termux%20%7C%20Kali%20%7C%20WSL-green.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Zero Deps](https://img.shields.io/badge/Dependencies-0-brightgreen.svg)]()
 
-*14 OSINT tools in one interface — no external tools needed.*
+*10 web reconnaissance tools in one interface — no external tools needed.*
 
 ---
 
 ## ✨ Features
 
-### 🎯 Target OSINT
-- **📱 Phone OSINT** — Carrier, country, type, risk scoring (99% accuracy)
-- **👤 Username OSINT** — 100+ platforms via CB-UserHunter Clone
-- **🌐 Domain OSINT** — WHOIS, DNS, subdomains, IPs
-- **🌍 IP OSINT** — Geolocation with multi-source consensus
-- **📧 Email OSINT** — Validation, breach check, risk scoring
-- **🖼️ Image Metadata** — EXIF extraction, GPS coordinates
+### 🌐 Domain & DNS
+- **🌐 Domain OSINT** — IPs (A/AAAA), WHOIS via socket, DNS records via DoH
+- **🌐 DNS Deep Recon** — NS, MX, TXT, SOA, CAA, SPF/DMARC, zone transfer check
 
-### 🌐 Network
-- **🔍 Port Scanner** — Multi-threaded, service detection, vulnerability hints
+### 🌍 Network
+- **🌍 IP OSINT** — Multi-source geolocation (ip-api.com + ipwho.is) with consensus
+- **🔍 Port Scanner** — Multi-threaded, service detection, banner grabbing, vulnerability hints
+- **🔐 SSL/TLS Analyzer** — Certificate, ciphers, protocol, grade (A+ to F)
 
 ### 🛡️ Web Recon
-- **📧 Email Harvester** — Collect emails via search engines
-- **🌐 Subdomain Enumerator** — 7 passive sources + brute force
-- **🌍 Web Fingerprint** — Detect 60+ technologies
-- **🔐 SSL/TLS Analyzer** — Certificate, ciphers, grade (A+ to F)
-- **📂 Directory Buster** — Path discovery with soft-404 detection
+- **🌐 Subdomain Enumerator** — 7 passive sources + bruteforce, cross-validation
+- **🌍 Web Fingerprint** — Detect 60+ technologies + security headers audit
+- **📂 Directory Buster** — Multi-baseline soft-404 detection, sensitivity scoring
+- **🔴 Nikto Wrapper** — Nikto integration for vulnerability scanning (requires nikto)
 
 ### 🎯 Combined
-- **🎯 Job Scan** — All-in-one recon (domain + subs + ports + SSL + fingerprint)
-- **⚡ Full Recon** — Auto-detect target type
+- **⚡ Full Web Recon** — All tools in parallel + auto HTML/TXT/JSON reports
+- **⚡ Fast Web Recon** — Skip subdomains + dirbuster (faster)
 
 ### 🆕 Unique Features
-- **Multi-source consensus** — Cross-verifies data from multiple APIs
-- **Confidence scoring** — Shows which fields are reliable
-- **Zero external tools** — Works without subfinder/nmap/sherlock
-- **Batteries included** — Python stdlib only (except phonenumbers/Pillow optional)
+- **DNS over HTTPS (DoH)** — No `nslookup`/`dig` needed (Cloudflare + Google fallback)
+- **Socket-based WHOIS** — No `whois` command needed (port 43)
+- **Thread-safe DNS resolution** — No global `setdefaulttimeout` bugs
+- **Multi-source consensus** — Cross-verifies IP geolocation
+- **Zero external tools** — Python stdlib only (nikto optional for vuln scan)
+- **Parallel execution** — Independent steps run simultaneously
+
+---
+
+## 📊 Accuracy Notes
+
+We don't claim "99% accuracy" — here's the honest picture:
+
+| Tool | Accuracy | Notes |
+|---|---|---|
+| **SSL/TLS Analyzer** | ~99% | Direct TCP connection, no guessing |
+| **DNS Deep (DoH)** | ~99% | Live queries via Cloudflare/Google |
+| **Domain OSINT (IPs)** | ~99% | Socket resolution |
+| **Port Scanner** | 95-99% | Depends on firewall/timeout |
+| **IP OSINT** | ~95% | Multi-source consensus |
+| **Web Fingerprint (Server)** | 85-95% | Header-based, reliable |
+| **WHOIS (Socket)** | ~90% | Some TLDs block port 43 |
+| **Web Fingerprint (Tech)** | 70-85% | Body patterns → some false positives |
+| **Subdomain Enum** | 60-80% | Depends on external sources |
+| **Directory Buster** | 60-75% | Soft-404 detection can fail |
+
+**Reality check:** No OSINT tool is 100% accurate. Results should be verified manually for critical decisions.
 
 ---
 
@@ -47,202 +67,248 @@
 
 ### Requirements
 - Python 3.8+
-- Optional: `pip install phonenumbers Pillow`
+- Optional: `nikto` (for vulnerability scanning)
 
 ### Quick Start
 
 ```bash
 git clone https://github.com/jude84162-sys/ReconX.git
 cd ReconX
-pip install phonenumbers Pillow  # optional but recommended
-python cli.py
-Or use the non-interactive CLI:
-python reconx.py +963912345678
-python reconx.py 8.8.8.8
-python reconx.py torvalds
-Usage
 
-Interactive CLI (Recommended)
-
-bash
-
+# Interactive CLI
 python cli.py
 
-You'll get a menu with 14 tools:
-[1]  📱 Phone OSINT
-[2]  👤 Username OSINT (CB-UserHunter)
-[3]  🌐 Domain OSINT
-[4]  🌍 IP OSINT
-[5]  📧 Email OSINT
-[6]  🖼️  Image Metadata
-[7]  🔍 Port Scanner
-[8]  📧 Email Harvester
-[9]  🌐 Subdomain Enumerator
-[10] 🌍 Web Fingerprint
-[11] 🔐 SSL/TLS Analyzer
-[12] 📂 Directory Buster
-[13] 🎯 Job Scan
-[14] 👤 CB-UserHunter Direct
-CLI (Scriptable)
-# Phone OSINT
-python reconx.py +19005551234
+# Non-interactive
+python recon.py example.com
+# Fast scan (skip subdomains + dirbuster)
+python recon.py example.com --fast
 
-# IP OSINT (multi-source)
-python reconx.py 8.8.8.8
+# Save JSON report
+python recon.py example.com --json
 
-# Username OSINT
-python reconx.py torvalds
+# Custom output
+python recon.py example.com --output report.json
 
-# Email OSINT
-python reconx.py user@example.com
+# More IPs in IP OSINT (default: 3)
+python recon.py example.com --max-ips 5
+```
 
+Module-Level Usage
+
+```bash
 # Domain OSINT
-python reconx.py example.com
-Module-Level
+python -m modules.web.domain_osint example.com
+
+# DNS Deep
+python -m modules.network.dns_deep example.com
+
 # Port scan
-python -m modules.port_open_scan 8.8.8.8 top100
+python -m modules.network.port_scan 8.8.8.8 top100
 
-# Subdomain enum (7 passive sources)
-python -m modules.subfinder_clone example.com
+# Subdomain enum
+python -m modules.web.subfinder_clone example.com
 
-# Username (100+ platforms)
-python -m modules.cb_userhunter_clone torvalds
-Why ReconX?
-Advantage Description
-🚀 Zero Install Python stdlib only (no subfinder/nmap/sherlock needed)
-🎯 Multi-Source Cross-verifies IP/domain data from multiple APIs
-📊 Confidence Shows which fields are reliable
-🌍 Cross-Platform Termux, Kali, WSL (Linux-based)
-🎨 Beautiful CLI Color output, organized menus
-📱 Phone OSINT Risk scoring with premium/VoIP detection
-👤 CB-UserHunter 100+ platforms, Google Dorks built-in
-🌐 Subfinder Clone 7 passive sources (crt.sh, OTX, urlscan, etc.)
-Project Structure
+# SSL/TLS
+python -m modules.network.ssl_analyzer example.com
+
+# Dir buster
+python -m modules.web.dir_buster https://example.com
+
+# Nikto (if installed)
+python -m modules.network.nikto_scan example.com 443
+```
+
+---
+
+📁 Project Structure
+
+```
 ReconX/
-├── cli.py                       # Interactive menu
-├── reconx.py                    # Scriptable CLI
+├── cli.py                       # Interactive menu (10 tools)
+├── recon.py                     # Full web recon (parallel, auto reports)
 ├── requirements.txt             # Optional deps
 ├── LICENSE                      # MIT License
 ├── README.md                    # This file
 │
 ├── modules/
 │   ├── __init__.py
-│   ├── env_detect.py            # Environment detection
-│   ├── phone_osint.py           # Phone number OSINT
-│   ├── cb_userhunter_clone.py   # Username (100+ platforms)
-│   ├── domain_osint.py          # Domain recon
-│   ├── ip_osint.py              # IP geolocation (multi-source)
-│   ├── email_osint.py           # Email OSINT
-│   ├── metadata_osint.py        # EXIF extraction
-│   ├── port_open_scan.py        # Port scanner
-│   ├── email_harvester.py       # Email harvester
-│   ├── subfinder_clone.py       # Subdomain enum (7 sources)
-│   ├── subdomain_enum.py        # Wrapper
-│   ├── web_fingerprint.py       # Web tech detection
-│   ├── ssl_analyzer.py          # SSL/TLS analysis
-│   ├── dir_buster.py            # Directory buster
-│   └── tool_integration.py      # External tool hooks (optional)
+│   │
+│   ├── network/                 # Network-layer tools
+│   │   ├── __init__.py
+│   │   ├── port_scan.py         # Port scanner
+│   │   ├── dns_deep.py          # DNS records (DoH)
+│   │   ├── ssl_analyzer.py      # SSL/TLS analysis
+│   │   └── nikto_scan.py        # Nikto wrapper (optional)
+│   │
+│   ├── web/                     # Web-layer tools
+│   │   ├── __init__.py
+│   │   ├── domain_osint.py      # Domain recon
+│   │   ├── subdomain_enum.py    # Subdomain wrapper
+│   │   ├── subfinder_clone.py   # 7 passive sources + brute
+│   │   ├── web_fingerprint.py   # Tech detection
+│   │   └── dir_buster.py        # Path discovery
+│   │
+│   ├── report/                  # Report generators
+│   │   ├── __init__.py
+│   │   └── html_report.py       # HTML dashboard
+│   │
+│   └── utils/                   # Utilities
+│       ├── __init__.py
+│       └── env_detect.py        # Environment detection
 │
 └── outputs/                     # Generated reports (gitignored)
-Platform Status
-Termux (Android) ✅
-Kali Linux ✅
-WSL (Ubuntu/Debian/Kali) ✅
-Native Linux ✅
-Module Accuracy
-Phone OSINT 99%
-IP OSINT (multi-source) 95%
-Domain OSINT 99%
-Username (CB-UserHunter) 95%
-Subdomain (7 sources) 95%
-SSL/TLS Analyzer 99%
-Port Scanner 99%
-Web Fingerprint 95%
-Email OSINT 95%
-Metadata (EXIF) 99%
-Dir Buster 90%
-Examples
+```
 
-Phone OSINT
-[*] Input:      +19005551234
-[*] E.164:      +19005551234
-[*] Country:    United States (US)
-[*] Carrier:    Unknown
-[*] Type:       PREMIUM_RATE
-[*] Timezone:   America/Adak
+---
 
-[!!] Risk: CRITICAL (score 70/100)
-IP OSINT (Multi-Source)
-[*] IP:         8.8.8.8
-[*] Sources:    2
+🖥️ Platform Status
 
-[+] Geolocation (Consensus):
-    Country:  United States (US)
-    City:     San Jose
-    ISP:      Google LLC
-    ASN:      15169
+Platform Status Notes
+Termux (Android) ✅ Tested
+Kali Linux ✅ Full support
+WSL (Ubuntu/Debian/Kali) ✅ Tested
+Native Linux ✅ Tested
+macOS ✅ Should work
+Windows (native) ⚠️ Untested (use WSL)
 
-[*] Source Confidence:
-    ✓ country
-    ⚠ city
-    ✓ isp
-CB-UserHunter
-[+] Found on GitHub:      https://github.com/torvalds
-[+] Found on GitLab:      https://gitlab.com/torvalds
-[+] Found on Keybase:     https://keybase.io/torvalds
-Legal Disclaimer
+---
+
+📝 Examples
+
+Full Web Recon
+
+```bash
+$ python recon.py example.com
+
+╔══════════════════════════════════════════════════════════════════╗
+║              Comprehensive Web Recon  [DEEP MODE] v3             ║
+╚══════════════════════════════════════════════════════════════════╝
+
+  🎯 Target: example.com
+  📅 Time:   2026-09-21 12:00:00
+
+──────────────────────────────────────────────────────────────────
+  [1/9] 🌐 Domain OSINT
+──────────────────────────────────────────────────────────────────
+  ✓ IPs resolved:       2
+  ✓ Subdomains found:   0
+  ✓ Registrar:          RESERVED-Internet Assigned Numbers Authority
+
+⚡ Running 7 steps in PARALLEL...
+
+──────────────────────────────────────────────────────────────────
+  [3/9] 🔍 Port Scanner
+──────────────────────────────────────────────────────────────────
+  Scanning 22 ports on 93.184.216.34...
+  ██████████████████████████████ 100.0% (22/22)
+  ✓ Open ports:         2
+      • 80    http
+      • 443   https
+
+══════════════════════════════════════════════════════════════════
+  📊 FINAL SUMMARY — example.com
+══════════════════════════════════════════════════════════════════
+
+  🌐 DOMAIN
+    IPs:             2
+    Subdomains:      0
+
+  🌍 IP
+    Primary:         93.184.216.34
+    Country:         United States
+    ISP:             Edgecast Inc.
+
+  🔐 SSL/TLS
+    Grade:           A+
+    Protocol:        TLSv1.3
+
+  ⚠ RISK SUMMARY
+    🔴 Critical:     0
+    🟠 High:         0
+    🟡 Medium:       16
+    🔵 Low:          1
+    Total:           17
+
+✓ JSON:  outputs/recon_example.com_20260921_120000.json
+✓ TXT:   outputs/recon_example.com_20260921_120000.txt
+✓ HTML:  outputs/recon_example.com_20260921_120000.html
+```
+
+DNS Deep Recon
+
+```bash
+$ python -m modules.network.dns_deep example.com
+
+[*] DNS Deep: example.com
+  [*] Querying DNS records via DoH (parallel)...
+  [*] Attempting AXFR via a.iana-servers.net...
+
+[+] Nameservers (2):
+    • a.iana-servers.net
+    • b.iana-servers.net
+[+] SPF: v=spf1 -all
+[!] DMARC: MISSING
+```
+
+---
+
+⚠️ Legal Disclaimer
 
 ReconX is intended for authorized security testing and OSINT research only.
 
-+
+✅ Use for:
 
-Use on systems you own or have permission
+· Systems you own or have explicit permission to test
+· Defensive security research
+· Personal OSINT investigations
+· Educational purposes
 
-to test
+❌ Do NOT use for:
 
-Use for defensive security research
+· Unauthorized surveillance
+· Systems belonging to others without consent
+· Harassment, stalking, or illegal activities
+· Any use that violates local/international law
 
-Use for personal OSINT investigations
-
-Do NOT use for unauthorized surveillance
-
-Do NOT use on systems belonging to others without consent
-
-Do NOT use for harassment, stalking, or illegal activities
+Note: Port scanning and directory busting generate visible traffic. Always ensure you have permission before scanning any target.
 
 Users are responsible for complying with all applicable laws.
-Contributing
+
+---
+
+🤝 Contributing
 
 Pull requests welcome. Please:
 
 1. Fork the repository
-
 2. Create a feature branch (git checkout -b feature/amazing-tool)
-
-3. Commit your changes
-
-4. Push to the branch
-
+3. Commit your changes (git commit -m 'Add amazing tool')
+4. Push to the branch (git push origin feature/amazing-tool)
 5. Open a Pull Request
-License
 
-MIT License - see LICENSE,
-Acknowledgments
+---
 
-CB-UserHunter by cyb3rm4d - inspiration for username OSINT
+📄 License
 
-Subfinder by projectdiscovery - inspiration for subdomain enumeration
+MIT License — see LICENSE
 
-crt.sh, urlscan.io, AlienVault OTX - passive DNS sources
+---
 
-ip-api.com, ipwho.is - geolocation APIs
+🙏 Acknowledgments
 
-The open-source OSINT community
+· crt.sh, urlscan.io, AlienVault OTX — passive DNS sources
+· hackertarget.com, rapiddns.io, web.archive.org, threatcrowd.org — subdomain sources
+· ip-api.com, ipwho.is — geolocation APIs
+· Cloudflare, Google — DNS-over-HTTPS resolvers
+· Nikto by Chris Sullo & David Lodge — vulnerability scanning
+· Subfinder by ProjectDiscovery — inspiration for subdomain enumeration
+
+---
+
 <div align="center">
 
-Built with for the OSINT community by jude84162-sys
+Built with ❤️ for the OSINT community
 
-Star this repo if you find it useful!
+⭐ Star this repo if you find it useful!
 
 </div>
-
