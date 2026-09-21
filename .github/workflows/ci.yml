@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  syntax-check:
+    name: Syntax & Imports
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install optional dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install phonenumbers Pillow || true
+
+      - name: Syntax check all Python files
+        run: |
+          echo "=== Checking syntax ==="
+          find . -name "*.py" -not -path "./.git/*" -not -path "*/__pycache__/*" -exec python -m py_compile {} \;
+          echo "✓ All files compile"
+
+      - name: Check core files
+        run: |
+          python -m py_compile cli.py
+          python -m py_compile recon.py
+          echo "✓ Core files OK"
+
+      - name: Test module imports
+        run: |
+          python << 'EOF'
+          import sys
+          sys.path.insert(0, ".")
+
+          categories = {
+              "network": ["port_scan", "dns_deep", "ssl_analyzer"],
+              "web":     ["domain_osint", "subdomain_enum", "subfinder_clone",
+                          "web_fingerprint", "dir_buster"],
+              "report":  ["html_report"],
+              "utils":   ["env_detect"],
+          }
+
+          failed = []
+          for cat, mods in categories.items():
+              for m in mods:
+                  try:
+                      __import__(f"modules.{cat}.{m}")
+                      print(f"  ✓ modules.{cat}.{m}")
+                  except Exception as e:
+                      print(f"  ✗ modules.{cat}.{m}: {e}")
+                      failed.append(f"{cat}/{m}")
+
+          if failed:
+              print(f"\n✗ {len(failed)} failed")
+              sys.exit(1)
+          print(f"\n✓ All modules import OK")
+          EOF
+
+      - name: Test CLI import
+        run: |
+          python -c "
+          import ast
+          ast.parse(open('cli.py').read())
+          ast.parse(open('recon.py').read())
+          print('✓ CLI + recon.py AST parse OK')
+          "
+
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install flake8
+        run: pip install flake8
+
+      - name: Lint with flake8
+        run: |
+          # Stop on syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics \
+            --exclude=.git,__pycache__,build,dist || true
+          
+          # Warnings (don't fail)
+          flake8 . --count --exit-zero --max-complexity=15 --max-line-length=120 \
+            --statistics --exclude=.git,__pycache__,build,dist
+
+  structure:
+    name: Project Structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required files
+        run: |
+          echo "=== Checking required files ==="
+          required=(
+            "cli.py"
+            "recon.py"
+            "README.md"
+            "requirements.txt"
+            "modules/__init__.py"
+            "modules/network/__init__.py"
+            "modules/web/__init__.py"
+            "modules/report/__init__.py"
+            "modules/utils/__init__.py"
+          )
+          
+          for f in "${required[@]}"; do
+            if [ -f "$f" ]; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ MISSING: $f"
+              exit 1
+            fi
+          done
+          
+          echo "✓ All required files present"

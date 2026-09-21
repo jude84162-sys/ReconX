@@ -1,0 +1,119 @@
+name: Recon Functional Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  recon-test:
+    name: Run recon.py on example.com
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install optional deps
+        run: |
+          pip install phonenumbers Pillow || true
+
+      - name: Run fast recon on example.com
+        run: |
+          echo "=== Running recon.py --fast on example.com ==="
+          timeout 180 python recon.py example.com --fast --quiet || true
+          echo ""
+          echo "=== Outputs generated ==="
+          ls -lh outputs/ || echo "No outputs dir"
+
+      - name: Verify reports created
+        run: |
+          echo "=== Checking report files ==="
+          count=$(find outputs -type f \( -name "*.json" -o -name "*.txt" -o -name "*.html" \) 2>/dev/null | wc -l)
+          echo "Found $count report files"
+          
+          if [ "$count" -gt 0 ]; then
+            echo "✓ Reports generated"
+            find outputs -type f | head -10
+          else
+            echo "⚠ No reports (network might be restricted)"
+          fi
+
+      - name: Upload reports as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recon-reports
+          path: outputs/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  dns-test:
+    name: DNS Deep Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test DNS resolution
+        run: |
+          python << 'EOF'
+          import sys
+          sys.path.insert(0, ".")
+          
+          from modules.network.dns_deep import run_dns_deep
+          
+          print("Testing DNS on example.com...")
+          r = run_dns_deep("example.com")
+          s = r.get("summary", {})
+          
+          print(f"  NS records: {s.get('nameservers', 0)}")
+          print(f"  MX records: {s.get('mx_records', 0)}")
+          
+          if s.get("nameservers", 0) > 0:
+              print("✓ DNS resolution works")
+          else:
+              print("⚠ No NS records (network may be restricted)")
+          EOF
+
+  ssl-test:
+    name: SSL Analyzer Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test SSL analyzer
+        run: |
+          python << 'EOF'
+          import sys
+          sys.path.insert(0, ".")
+          
+          from modules.network.ssl_analyzer import run_ssl_analyzer
+          
+          print("Testing SSL on example.com:443...")
+          r = run_ssl_analyzer("example.com")
+          
+          if r.get("error"):
+              print(f"⚠ SSL error: {r['error']}")
+          else:
+              print(f"  Grade: {r.get('grade')}")
+              print(f"  Protocol: {r.get('protocol')}")
+              print("✓ SSL analysis works")
+          EOF

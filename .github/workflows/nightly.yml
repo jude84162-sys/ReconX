@@ -1,0 +1,56 @@
+name: Nightly Full Test
+
+on:
+  schedule:
+    # Runs at 02:00 UTC every day
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  full-recon:
+    name: Full Recon Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install optional deps
+        run: pip install phonenumbers Pillow || true
+
+      - name: Run full recon
+        run: |
+          echo "=== Full recon on example.com ==="
+          timeout 600 python recon.py example.com || true
+          echo ""
+          echo "=== Reports ==="
+          ls -lh outputs/
+
+      - name: Test individual modules
+        run: |
+          echo "=== Testing each module ==="
+          
+          echo "--- Domain OSINT ---"
+          python -m modules.web.domain_osint example.com 2>&1 | head -20 || true
+          
+          echo ""
+          echo "--- IP OSINT ---"
+          python -c "
+          from modules.network.dns_deep import run_dns_deep
+          r = run_dns_deep('example.com')
+          print(f'NS: {r[\"summary\"][\"nameservers\"]}')
+          " || true
+
+      - name: Upload nightly reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-reports
+          path: outputs/
+          retention-days: 14
+          if-no-files-found: ignore
