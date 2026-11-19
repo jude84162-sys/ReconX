@@ -4,6 +4,7 @@
 import os
 import sys
 import json
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -132,6 +133,7 @@ def main_menu():
         print(f"  {C.GREEN}[38]{C.RESET} 📸 Screenshot Gallery (aquatone-style)")
         print()
         print(f"{C.BOLD}{C.MAGENTA}  ── Actions ──{C.RESET}")
+        print(f"  {C.GREEN}[g]{C.RESET}  🖥️  Launch Web GUI")
         print(f"  {C.GREEN}[i]{C.RESET}  ℹ️  Environment")
         print(f"  {C.GREEN}[h]{C.RESET}  ❓ Help")
         print(f"  {C.GREEN}[o]{C.RESET}  📁 View Outputs")
@@ -179,6 +181,7 @@ def main_menu():
             "36": dom_xss_menu,
             "37": live_probe_menu,
             "38": screenshot_menu,
+            "g": gui_menu,
             "i": show_env,
             "h": show_help,
             "o": show_outputs,
@@ -1299,6 +1302,8 @@ def show_help():
     print(f"{C.BOLD}{C.GREEN}  Live Hosts & Screenshots (37-38):{C.RESET}")
     print(f"   37 live prober (httpx)   38 screenshot gallery (aquatone)")
     print()
+    print(f"{C.BOLD}{C.MAGENTA}  Web GUI (g):{C.RESET}     browser UI for the same 38 tools")
+    print()
     print(f"{C.BOLD}  CLI usage:{C.RESET}")
     print(f"  python recon.py example.com")
     print(f"  python recon.py example.com --fast")
@@ -1338,6 +1343,41 @@ def show_outputs():
 
     if len(files) > 20:
         print(f"  ... and {len(files) - 20} more")
+
+    pause()
+
+
+# ============================================================
+# Web GUI
+# ============================================================
+
+def gui_menu():
+    clear()
+    banner()
+    section("🖥️  Web GUI (reconx_gui)")
+
+    server = BASE_DIR / "reconx_gui" / "server.py"
+    if not server.exists():
+        print(f"{C.YELLOW}  ⚠ reconx_gui/ is missing from this checkout.{C.RESET}")
+        print(f"{C.GRAY}  It ships at the repo root — restore the folder and retry.{C.RESET}")
+        pause()
+        return
+
+    port = prompt("  Port", "8777")
+    host = prompt("  Bind host", "127.0.0.1")
+    open_browser = confirm("  Open in browser?")
+
+    cmd = [sys.executable, str(server), "--port", port, "--host", host]
+    if not open_browser:
+        cmd.append("--no-browser")
+
+    print(f"\n{C.GREEN}  ▶ Starting GUI on http://{host}:{port}{C.RESET}")
+    print(f"{C.GRAY}  Ctrl+C stops the server and returns to this menu.{C.RESET}\n")
+
+    try:
+        subprocess.run(cmd, cwd=str(BASE_DIR))
+    except KeyboardInterrupt:
+        print(f"\n{C.YELLOW}  ■ GUI server stopped.{C.RESET}")
 
     pause()
 
