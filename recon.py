@@ -180,10 +180,8 @@ def step_ip_multi(ips, max_ips=3):
             if flags:
                 print(f"      Flags:   {', '.join(flags)}")
 
-        # Return primary result (for backwards compat)
-        primary = results[0]["data"] if results else {}
-        primary["_all_results"] = [r["data"] for r in results]
-        primary["_all_ips"] = [r["ip"] for r in results]
+        # Return primary result (for backwards compat) - strip circular refs
+        primary = {k: v for k, v in results[0]["data"].items() if k not in ("_all_results", "_all_ips")} if results else {}
         return primary
 
     except Exception as e:
@@ -314,10 +312,62 @@ def step_subdomains(target, deep=True):
             for s in result["subdomains"][:15]:
                 print(f"      → {s['hostname']:<45} {s['ip']}")
 
+            # Which of them actually serve HTTP(S)?
+            try:
+                from modules.web.live_probe import probe_hosts
+                print(f"\n  {C.GRAY}Probing HTTP(S) on discovered subdomains...{C.RESET}")
+                probe = probe_hosts(
+                    [s["hostname"] for s in result["subdomains"]],
+                    threads=20, timeout=5,
+                )
+                result["live"] = probe
+                print(f"  {C.GREEN}✓{C.RESET} Live web hosts:    {probe['alive']} "
+                      f"(of {probe['total']})")
+                for entry in probe["results"]:
+                    if entry.get("alive"):
+                        print(f"      🌐 {entry['url']:<45} "
+                              f"[{entry['status']}] {entry.get('title') or ''}"[:110])
+            except Exception as e:
+                print(f"  {C.YELLOW}⚠ Live host probe failed: {e}{C.RESET}")
+
         return result
     except Exception as e:
         print(f"  {C.RED}✗ Subdomain enum failed: {e}{C.RESET}")
         return {}
+
+
+# ============================================================
+# Optional Stage: Screenshots of live hosts
+# ============================================================
+
+def step_screenshots(target, subs, outdir=None):
+    """Capture the live subdomains (or the target itself) after the scan."""
+    print(f"\n{C.CYAN}{'═' * 70}{C.RESET}")
+    print(f"{C.BOLD}{C.WHITE}  📸 Screenshotting Live Hosts{C.RESET}")
+    print(f"{C.CYAN}{'═' * 70}{C.RESET}\n")
+
+    from modules.web.aquatone_clone import (
+        backend_hint, is_screenshot_available, print_screenshot_report, run_screenshots,
+    )
+
+    live = [r["url"] for r in (subs.get("live") or {}).get("results", []) if r.get("alive")]
+    if not live:
+        print(f"  {C.GRAY}No live subdomains — capturing the target itself{C.RESET}")
+        live = [target]
+
+    if not is_screenshot_available():
+        print(f"  {C.YELLOW}⚠ No screenshot backend — {backend_hint()}{C.RESET}")
+        return {}
+
+    print(f"  {C.GRAY}Capturing {len(live)} host(s)...{C.RESET}")
+    result = run_screenshots(
+        live,
+        outdir=outdir or "outputs/screenshots",
+        source=target,
+        verbose=True,
+    )
+    print_screenshot_report(result)
+    return result
 
 
 # ============================================================
@@ -795,6 +845,7 @@ def build_summary(target, steps):
         "subdomains": {
             "total": subs.get("total_unique", 0),
             "by_source": subs.get("by_source", {}),
+            "live": subs.get("live", {}).get("alive", 0),
         },
         "fingerprint": {
             "technologies": len(fp.get("technologies", [])),
@@ -859,6 +910,7 @@ def print_summary(summary):
 
     print(f"\n  {C.BOLD}{C.MAGENTA}🌐 SUBDOMAINS{C.RESET}")
     print(f"    Total:           {summary['subdomains']['total']}")
+    print(f"    Live (HTTP):     {summary['subdomains'].get('live', 0)}")
     for src, count in summary['subdomains'].get('by_source', {}).items():
         print(f"    {src:<17} {count}")
 
@@ -923,7 +975,8 @@ def print_summary(summary):
 # Main Recon Runner (PARALLEL)
 # ============================================================
 
-def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3):
+def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3,
+              screenshots=False):
     """Run full web recon with parallel execution."""
     target = target.strip().lower()
     if target.startswith(("http://", "https://")):
@@ -973,6 +1026,11 @@ def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3):
                 print(f"{C.RED}✗ [{name}] thread failed: {e}{C.RESET}")
                 steps[name] = {}
 
+    # === Optional: screenshot the live hosts (after enumeration) ===
+    if screenshots:
+        steps["screenshots"] = _safe_step(
+            "screenshots", step_screenshots, target, steps.get("subdomains", {}))
+
     # === Build final result ===
     result = {
         "timestamp": start_time.isoformat(),
@@ -1011,6 +1069,7 @@ Examples:
   python recon.py example.com --json
   python recon.py example.com --output report.json
   python recon.py example.com --max-ips 5
+  python recon.py example.com --screenshots
         """
     )
     parser.add_argument("target", help="Domain or URL to scan")
@@ -1022,6 +1081,9 @@ Examples:
                         help="Output file path")
     parser.add_argument("--max-ips", type=int, default=3,
                         help="Max IPs to check in IP OSINT (default: 3)")
+    parser.add_argument("--screenshots", action="store_true",
+                        help="Screenshot live subdomains after the scan "
+                             "(saved to outputs/screenshots — needs Playwright or Chrome)")
     parser.add_argument("--quiet", "-q", action="store_true",
                         help="Quiet mode")
     parser.add_argument("--version", action="version", version="ReconX v2.0.0")
@@ -1038,6 +1100,7 @@ Examples:
             save_json=args.json or bool(args.output),
             output_file=args.output,
             max_ips=args.max_ips,
+            screenshots=args.screenshots,
         )
         return 0
     except KeyboardInterrupt:

@@ -53,7 +53,48 @@ SCANNERS = {
         "icon": "🔑",
         "needs_deps": None,
     },
+    # ---- Advanced modules ----
+    "graphql": {
+        "module": "modules.vuln.advanced.graphql_scanner",
+        "name": "GraphQL",
+        "icon": "📊",
+        "needs_deps": None,
+    },
+    "api_spec": {
+        "module": "modules.vuln.advanced.api_fuzzer",
+        "name": "API / Swagger",
+        "icon": "🔌",
+        "needs_deps": None,
+    },
+    "deserialization": {
+        "module": "modules.vuln.advanced.deserialization",
+        "name": "Deserialization",
+        "icon": "🧩",
+        "needs_deps": None,
+    },
+    "xxe": {
+        "module": "modules.vuln.advanced.xxe_lfi",
+        "name": "XXE / File Inclusion",
+        "icon": "📄",
+        "needs_deps": None,
+    },
+    "cloud_metadata": {
+        "module": "modules.vuln.advanced.cloud_metadata",
+        "name": "Cloud Metadata SSRF",
+        "icon": "☁️",
+        "needs_deps": None,
+    },
+    "buckets": {
+        "module": "modules.vuln.advanced.bucket_checker",
+        "name": "Bucket Permissions",
+        "icon": "🪣",
+        "needs_deps": None,
+    },
 }
+
+# Scanners whose scan() accepts (target, timeout=..., verbose=...)
+ADVANCED_KEYS = ("graphql", "api_spec", "deserialization", "xxe",
+                 "cloud_metadata", "buckets")
 
 
 def list_scanners():
@@ -76,6 +117,8 @@ def run_scanner(scanner_key, target, timeout=300, verbose=False):
             result = scan_fn(target, timeout=timeout, verbose=verbose)
         elif scanner_key in ("jwt",):
             result = scan_fn(target, timeout=10, verbose=verbose)
+        elif scanner_key in ADVANCED_KEYS:
+            result = scan_fn(target, timeout=timeout, verbose=verbose)
         else:
             result = scan_fn(target, verbose=verbose)
 

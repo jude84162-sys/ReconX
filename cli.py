@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ReconX - Interactive CLI v4 (Web Recon — 15 tools)"""
+"""ReconX - Interactive CLI v5 (Recon & Vulnerability Suite — 38 tools)"""
 
 import os
 import sys
@@ -52,8 +52,8 @@ def banner():
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██╔╝ ██╗             ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝             ║
 ║                                                                  ║
-║              Comprehensive Web Recon  v4.1.1.0                     ║
-║                        18 Tools Available                        ║
+║         Comprehensive Web Recon & Vuln Suite  v5.0.0             ║
+║                        38 Tools Available                        ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 """)
 
@@ -105,8 +105,31 @@ def main_menu():
         print(f"  {C.RED}[23]{C.RESET} 💰 Bug Bounty Nikto (multi-target)")
         print()
         print(f"{C.BOLD}{C.GREEN}  ── Full Recon (recommended) ──{C.RESET}")
-        print(f"  {C.GREEN}[24]{C.RESET} 🎯 Full Web Recon   (parallel, 14 tools)")
+        print(f"  {C.GREEN}[24]{C.RESET} 🎯 Full Web Recon(parallel, 14 tools)")
         print(f"  {C.GREEN}[25]{C.RESET} ⚡ Fast Web Recon   (skip subs/dirs)")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Advanced Attack Surface ──{C.RESET}")
+        print(f"  {C.RED}[26]{C.RESET} 🚀 Attack Surface & Vuln Fuzzer (crt.sh + Wayback + Leaks)")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Advanced API & Logic ──{C.RESET}")
+        print(f"  {C.RED}[27]{C.RESET} 📊 GraphQL Introspection & Abuse")
+        print(f"  {C.RED}[28]{C.RESET} 🔌 API / Swagger Fuzzer")
+        print(f"  {C.RED}[29]{C.RESET} 📦 Mass Assignment & Param Pollution")
+        print(f"  {C.RED}[30]{C.RESET} 👤 BOLA / IDOR Mapper (2 accounts)")
+        print(f"  {C.RED}[31]{C.RESET} ⚡ Race Condition Fuzzer")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Deep Injection & Cloud ──{C.RESET}")
+        print(f"  {C.RED}[32]{C.RESET} 🧩 Deserialization Inspector")
+        print(f"  {C.RED}[33]{C.RESET} 📄 XXE & File Inclusion")
+        print(f"  {C.RED}[34]{C.RESET} ☁️  Cloud Metadata SSRF")
+        print(f"  {C.RED}[35]{C.RESET} 🪣 Bucket & Asset Permissions")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Client-Side ──{C.RESET}")
+        print(f"  {C.RED}[36]{C.RESET} 🧠 DOM XSS (headless browser)")
+        print()
+        print(f"{C.BOLD}{C.MAGENTA}  ── Live Hosts & Screenshots ──{C.RESET}")
+        print(f"  {C.GREEN}[37]{C.RESET} 📡 Live Host Prober  (httpx / httprobe)")
+        print(f"  {C.GREEN}[38]{C.RESET} 📸 Screenshot Gallery (aquatone-style)")
         print()
         print(f"{C.BOLD}{C.MAGENTA}  ── Actions ──{C.RESET}")
         print(f"  {C.GREEN}[i]{C.RESET}  ℹ️  Environment")
@@ -143,6 +166,19 @@ def main_menu():
             "23": bugbounty_nikto_menu,
             "24": full_web_recon_menu,
             "25": fast_web_recon_menu,
+            "26": attack_surface_menu,
+            "27": graphql_menu,
+            "28": api_fuzzer_menu,
+            "29": mass_assignment_menu,
+            "30": bola_menu,
+            "31": race_condition_menu,
+            "32": deserialization_menu,
+            "33": xxe_lfi_menu,
+            "34": cloud_metadata_menu,
+            "35": bucket_menu,
+            "36": dom_xss_menu,
+            "37": live_probe_menu,
+            "38": screenshot_menu,
             "i": show_env,
             "h": show_help,
             "o": show_outputs,
@@ -806,8 +842,334 @@ def full_web_recon_menu():
 
     try:
         from recon import run_recon
-        run_recon(t, deep=True, save_json_flag=True,
-                  save_html_report=True, save_txt_report=True, max_ips=max_ips)
+        run_recon(t, deep=True, save_json=True, max_ips=max_ips)
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def attack_surface_menu():
+    clear()
+    banner()
+    section("🚀 Attack Surface & Vuln Fuzzer")
+
+    print(f"  {C.GRAY}crt.sh subdomains + Wayback endpoints + param triage + leak fuzzing{C.RESET}")
+    print(f"  {C.RED}⚠ Active fuzzing — use only on authorized targets{C.RESET}\n")
+
+    target = prompt("  Target domain (e.g. example.com)")
+    if not target:
+        print(f"{C.RED}  [!] Target cannot be empty.{C.RESET}")
+        pause()
+        return
+
+    use_tor = confirm("  Route through Tor SOCKS5h (127.0.0.1:9050)?")
+
+    print(f"\n{C.YELLOW}  ⚡ Building attack surface for {target}...{C.RESET}\n")
+
+    try:
+        from modules.web.attack_surface import AttackSurfaceEngine
+        engine = AttackSurfaceEngine(target=target, use_tor=use_tor)
+        engine.run_recon_pipeline()
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+# ============================================================
+# Advanced Scanners (27-36)
+# ============================================================
+
+def _header_from_input(value):
+    """Parse 'Name: value' into a header dict; bare values become Authorization."""
+    if not value:
+        return None
+    if ":" in value:
+        name, val = value.split(":", 1)
+        return {name.strip(): val.strip()}
+    return {"Authorization": value}
+
+
+def graphql_menu():
+    _run_vuln_scanner("graphql", "📊 GraphQL Introspection & Abuse",
+                      "Endpoint discovery, introspection, batching, field suggestions")
+
+
+def api_fuzzer_menu():
+    _run_vuln_scanner("api_spec", "🔌 API / Swagger Fuzzer",
+                      "Discovers swagger/openapi/Postman; type-mismatch on GET params")
+
+
+def deserialization_menu():
+    _run_vuln_scanner("deserialization", "🧩 Deserialization Inspector",
+                      "Passive: cookies, hidden fields, URL params, headers")
+
+
+def xxe_lfi_menu():
+    _run_vuln_scanner("xxe", "📄 XXE & File Inclusion",
+                      "SOAP/SVG/XML entities + LFI traversal and PHP wrappers")
+
+
+def cloud_metadata_menu():
+    _run_vuln_scanner("cloud_metadata", "☁️  Cloud Metadata SSRF",
+                      "AWS/GCP/Azure/OCI metadata + internal port discovery")
+
+
+def bucket_menu():
+    _run_vuln_scanner("buckets", "🪣 Bucket & Asset Permissions",
+                      "S3/Azure Blob/GCP bucket permutations (read-only)")
+
+
+def mass_assignment_menu():
+    clear()
+    banner()
+    section("📦 Mass Assignment & Parameter Pollution")
+
+    print(f"  {C.RED}⚠ Sends state-changing requests — use a test account{C.RESET}")
+    print(f"  {C.GRAY}Appends privileged fields (is_admin, role, balance...) to your body{C.RESET}\n")
+
+    u = prompt("  API endpoint URL")
+    if not u:
+        return
+
+    body = prompt("  Body to mutate (JSON or form, blank = GET probing)", default="")
+    auth = prompt("  Auth header (Name: value, optional)", default="")
+
+    try:
+        from modules.vuln.advanced.mass_assignment import scan, print_report
+        r = scan(u, body=body or None, headers=_header_from_input(auth), verbose=True)
+        print_report(r, "Mass Assignment & Parameter Pollution")
+        if confirm("  Save JSON report?"):
+            save_report({"vuln_mass_assignment": r}, "vuln_mass_assignment")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def bola_menu():
+    clear()
+    banner()
+    section("👤 BOLA / IDOR Mapper")
+
+    print(f"  {C.RED}⚠ Needs two low-privilege test accounts{C.RESET}")
+    print(f"  {C.GRAY}Crawls objects as account A, replays them as account B{C.RESET}\n")
+
+    u = prompt("  Authenticated endpoint URL (e.g. https://api.example.com/users/101)")
+    if not u:
+        return
+
+    token_a = prompt("  Account A header value (e.g. Bearer eyJ...)")
+    token_b = prompt("  Account B header value")
+    if not token_a or not token_b:
+        print(f"{C.RED}  ✗ Two credentials are required.{C.RESET}")
+        pause()
+        return
+
+    header = prompt("  Header name", default="Authorization")
+
+    try:
+        from modules.vuln.advanced.bola_mapper import scan, print_report
+        r = scan(u, token_a, token_b, header=header, verbose=True)
+        print_report(r, "BOLA / IDOR Mapper")
+        if confirm("  Save JSON report?"):
+            save_report({"vuln_bola": r}, "vuln_bola")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def race_condition_menu():
+    clear()
+    banner()
+    section("⚡ Race Condition Fuzzer")
+
+    print(f"  {C.RED}⚠ Sends synchronized parallel requests — authorized targets only{C.RESET}")
+    print(f"  {C.GRAY}Best on one-time actions: coupons, transfers, votes, invites{C.RESET}\n")
+
+    u = prompt("  Endpoint URL")
+    if not u:
+        return
+
+    method = prompt("  HTTP method", default="POST").upper()
+    data = prompt("  Request body (optional)", default="")
+    auth = prompt("  Auth header (Name: value, optional)", default="")
+
+    threads = prompt("  Concurrent requests", default="20")
+    max_expected = prompt("  Max expected successes", default="1")
+    try:
+        threads = int(threads)
+        max_expected = int(max_expected)
+    except ValueError:
+        threads, max_expected = 20, 1
+
+    try:
+        from modules.vuln.advanced.race_condition import scan, print_report
+        r = scan(u, method=method, data=data or None,
+                 headers=_header_from_input(auth), threads=threads,
+                 max_expected=max_expected, verbose=True)
+        print_report(r, "Race Condition Fuzzer")
+        if confirm("  Save JSON report?"):
+            save_report({"vuln_race": r}, "vuln_race")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def dom_xss_menu():
+    clear()
+    banner()
+    section("🧠 DOM XSS (headless browser)")
+
+    print(f"  {C.GRAY}Static taint analysis + optional Chromium execution via Playwright{C.RESET}\n")
+
+    u = prompt("  URL (SPA or hash-routed page)")
+    if not u:
+        return
+
+    use_browser = confirm("  Launch headless browser? (needs Playwright)")
+
+    try:
+        from modules.vuln.web.dom_xss import scan, print_report
+        r = scan(u, use_browser=use_browser, verbose=True)
+        print_report(r, "DOM XSS")
+        if confirm("  Save JSON report?"):
+            save_report({"vuln_dom_xss": r}, "vuln_dom_xss")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+# ============================================================
+# Live Hosts & Screenshots (37-38)
+# ============================================================
+
+def _expand_targets(raw):
+    """Expand 'host1 host2 -f file --json report.json' into a target list."""
+    targets = []
+    parts = (raw or "").split()
+    i = 0
+
+    while i < len(parts):
+        part = parts[i]
+        if part in ("-f", "--file", "--json", "--from-json") and i + 1 < len(parts):
+            path = parts[i + 1]
+            try:
+                if part in ("--json", "--from-json"):
+                    from modules.web.aquatone_clone import _targets_from_json
+                    targets += _targets_from_json(path)
+                else:
+                    with open(path, encoding="utf-8", errors="ignore") as fh:
+                        targets += [l.strip() for l in fh
+                                    if l.strip() and not l.startswith("#")]
+            except Exception as e:
+                print(f"{C.RED}  ✗ Can't read {path}: {e}{C.RESET}")
+            i += 2
+            continue
+        targets.append(part)
+        i += 1
+
+    return targets
+
+
+def live_probe_menu():
+    clear()
+    banner()
+    section("📡 Live Host Prober (httpx / httprobe)")
+
+    print(f"  {C.GRAY}HTTP/HTTPS probe of subdomains: status, title, server, redirects{C.RESET}")
+    print(f"  {C.GRAY}Input: hosts, -f hosts.txt, or --json subdomains.json{C.RESET}\n")
+
+    raw = prompt("  Hosts")
+    targets = _expand_targets(raw)
+    if not targets:
+        return
+
+    threads = prompt("  Threads", default="20")
+    try:
+        threads = int(threads)
+    except ValueError:
+        threads = 20
+
+    timeout = prompt("  Timeout (seconds)", default="6")
+    try:
+        timeout = int(timeout)
+    except ValueError:
+        timeout = 6
+
+    try:
+        from modules.web.live_probe import probe_hosts, print_probe_report, save_probe_report
+
+        print(f"\n{C.YELLOW}  ⚡ Probing {len(targets)} host(s)...{C.RESET}\n")
+        r = probe_hosts(targets, threads=threads, timeout=timeout, verbose=True)
+        print_probe_report(r)
+
+        if confirm("  Save JSON report?"):
+            print(f"{C.GREEN}  ✓ Saved: {save_probe_report(r)}{C.RESET}")
+    except Exception as e:
+        print(f"{C.RED}  Error: {e}{C.RESET}")
+        import traceback
+        traceback.print_exc()
+
+    pause()
+
+
+def screenshot_menu():
+    clear()
+    banner()
+    section("📸 Screenshot Gallery (aquatone-style)")
+
+    try:
+        from modules.web.aquatone_clone import backend_hint
+        print(f"  {C.GRAY}Backend: {backend_hint()}{C.RESET}")
+    except Exception:
+        pass
+
+    print(f"  {C.GRAY}Dead subdomains are skipped; a gallery index.html is written{C.RESET}")
+    print(f"  {C.GRAY}Input: hosts, -f hosts.txt, or --json subdomains.json{C.RESET}\n")
+
+    raw = prompt("  Hosts")
+    targets = _expand_targets(raw)
+    if not targets:
+        return
+
+    outdir = prompt("  Output dir", default="outputs/screenshots")
+
+    workers = prompt("  Parallel captures", default="3")
+    try:
+        workers = int(workers)
+    except ValueError:
+        workers = 3
+
+    try:
+        from modules.web.aquatone_clone import (
+            run_screenshots, print_screenshot_report, save_screenshot_report,
+        )
+
+        print(f"\n{C.YELLOW}  ⚡ Capturing {len(targets)} target(s)...{C.RESET}\n")
+        r = run_screenshots(targets, outdir=outdir, workers=workers,
+                            verbose=True,
+                            source=targets[0] if len(targets) == 1 else f"{len(targets)} hosts")
+        print_screenshot_report(r)
+
+        if confirm("  Save JSON report?"):
+            print(f"{C.GREEN}  ✓ Saved: {save_screenshot_report(r)}{C.RESET}")
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
         import traceback
@@ -831,8 +1193,7 @@ def fast_web_recon_menu():
 
     try:
         from recon import run_recon
-        run_recon(t, deep=False, save_json_flag=True,
-                  save_html_report=True, save_txt_report=True, max_ips=2)
+        run_recon(t, deep=False, save_json=True, max_ips=2)
     except Exception as e:
         print(f"{C.RED}  Error: {e}{C.RESET}")
         import traceback
@@ -867,7 +1228,7 @@ def show_env():
             else:
                 print(f"    {C.RED}✗{C.RESET} {engine}")
 
-        print(f"\n  {C.BOLD}Web Recon Modules:{C.RESET}")
+        print(f"\n  {C.BOLD}Modules:{C.RESET}")
         mods = [
             ("network.port_scan", "🔍"),
             ("network.dns_deep", "🌐"),
@@ -882,8 +1243,22 @@ def show_env():
             ("web.param_finder", "🔗"),
             ("web.waf_detector", "🛡️ "),
             ("web.web_monitor", "👁️ "),
+            ("web.attack_surface", "🚀"),
             ("report.html_report", "📊"),
             ("utils.env_detect", "ℹ️ "),
+            ("utils.http_client", "🌐"),
+            ("vuln.advanced.graphql_scanner", "📊"),
+            ("vuln.advanced.api_fuzzer", "🔌"),
+            ("vuln.advanced.mass_assignment", "📦"),
+            ("vuln.advanced.bola_mapper", "👤"),
+            ("vuln.advanced.race_condition", "⚡"),
+            ("vuln.advanced.deserialization", "🧩"),
+            ("vuln.advanced.xxe_lfi", "📄"),
+            ("vuln.advanced.cloud_metadata", "☁️ "),
+            ("vuln.advanced.bucket_checker", "🪣"),
+            ("vuln.web.dom_xss", "🧠"),
+            ("web.live_probe", "📡"),
+            ("web.aquatone_clone", "📸"),
         ]
 
         working = 0
@@ -907,36 +1282,22 @@ def show_help():
     banner()
     section("❓ Help")
 
-    print(f"{C.BOLD}  ReconX v4.1.0 — Web Recon Toolkit (15 tools){C.RESET}")
-    print(f"  Zero external tools needed. Termux, Kali, WSL.")
+    print(f"{C.BOLD}  ReconX v5.0.0 — Web Recon & Vuln Suite (38 tools){C.RESET}")
+    print(f"  Zero mandatory external tools. Termux, Kali, WSL.")
     print()
-    print(f"{C.BOLD}  Recon Modules:{C.RESET}")
-    print(f"  {C.CYAN}1{C.RESET}  Domain OSINT")
-    print(f"  {C.CYAN}2{C.RESET}  IP OSINT")
-    print(f"  {C.CYAN}3{C.RESET}  Port Scanner")
-    print(f"  {C.CYAN}4{C.RESET}  DNS Deep")
-    print(f"  {C.CYAN}5{C.RESET}  Subdomain Enumerator")
-    print()
-    print(f"{C.BOLD}  Web Discovery:{C.RESET}")
-    print(f"  {C.CYAN}6{C.RESET}  Web Fingerprint")
-    print(f"  {C.CYAN}7{C.RESET}  Directory Buster")
-    print(f"  {C.CYAN}8{C.RESET}  Login Finder")
-    print(f"  {C.CYAN}9{C.RESET}  Register Finder")
-    print(f"  {C.CYAN}10{C.RESET} Parameter Finder")
-    print()
-    print(f"{C.BOLD}  Security & Monitoring:{C.RESET}")
-    print(f"  {C.CYAN}11{C.RESET} WAF Detector")
-    print(f"  {C.CYAN}12{C.RESET} Web Monitor")
-    print(f"  {C.CYAN}13{C.RESET} SSL/TLS Analyzer")
-    print()
-    print(f"{C.BOLD}{C.RED}  Vulnerability Scan (active):{C.RESET}")
-    print(f"  {C.RED}14{C.RESET} DIRB Content Scan")
-    print(f"  {C.RED}15{C.RESET} Bug Bounty Checks")
-    print(f"  {C.RED}16{C.RESET} Bug Bounty Nikto")
-    print()
-    print(f"{C.BOLD}{C.GREEN}  Full Recon:{C.RESET}")
-    print(f"  {C.GREEN}17{C.RESET} Full Web Recon (parallel, 14 tools)")
-    print(f"  {C.GREEN}18{C.RESET} Fast Web Recon")
+    print(f"{C.BOLD}  Recon (1-5):{C.RESET}  Domain/IP OSINT, port scan, DNS, subdomains")
+    print(f"{C.BOLD}  Web Discovery (6-10):{C.RESET}  fingerprint, dirs, login/register, params")
+    print(f"{C.BOLD}  Security (11-13):{C.RESET}  WAF, monitor, SSL/TLS")
+    print(f"{C.BOLD}{C.RED}  Vuln Scanners (14-20):{C.RESET}  SQLi, XSS, SSRF, SSTI, CMDi, JWT, ALL")
+    print(f"{C.BOLD}{C.RED}  Bounty (21-23):{C.RESET}  DIRB, bounty checks, Nikto")
+    print(f"{C.BOLD}{C.GREEN}  Full Recon (24-25):{C.RESET}  full / fast parallel recon")
+    print(f"{C.BOLD}{C.MAGENTA}  Advanced Attack Surface (26-36):{C.RESET}")
+    print(f"   26 attack surface    27 GraphQL          28 API/Swagger")
+    print(f"   29 mass assignment   30 BOLA/IDOR        31 race condition")
+    print(f"   32 deserialization   33 XXE/LFI          34 cloud metadata")
+    print(f"   35 bucket perms      36 DOM XSS (headless)")
+    print(f"{C.BOLD}{C.GREEN}  Live Hosts & Screenshots (37-38):{C.RESET}")
+    print(f"   37 live prober (httpx)   38 screenshot gallery (aquatone)")
     print()
     print(f"{C.BOLD}  CLI usage:{C.RESET}")
     print(f"  python recon.py example.com")
@@ -993,7 +1354,7 @@ def save_report(data, prefix="report"):
     fp = outputs / f"{prefix}_{ts}.json"
 
     data["_saved_at"] = datetime.now().isoformat()
-    data["_tool"] = "ReconX v4.1.0"
+    data["_tool"] = "ReconX v5.0.0"
 
     try:
         with open(fp, "w", encoding="utf-8") as f:
