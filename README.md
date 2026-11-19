@@ -134,7 +134,9 @@ python cli.py
 
 # Non-interactive
 python recon.py example.com
-📖 Usage
+```
+
+## 📖 Usage
 
 Interactive CLI (Recommended)
 
@@ -195,6 +197,23 @@ python cli.py
 [37] 📡 Live Host Prober  (httpx / httprobe)
 [38] 📸 Screenshot Gallery (aquatone-style)
 ```
+
+Web GUI
+
+```bash
+python reconx_gui/server.py                    # → http://127.0.0.1:8777
+python reconx_gui/server.py --port 9000 --no-browser
+```
+
+The browser UI in `reconx_gui/` drives the same 38 tools as `cli.py` through the
+same `modules/` engines — all 38 bind to a real module when the folder sits at
+the repo root. `engine/builtins.py` adds ~20 standalone stdlib scanners as a
+fallback if the modules are missing, so the UI still runs standalone. It adds a
+live-streaming console (SSE), findings ranked by severity, replayable scan
+history and JSON export to `reconx_gui/outputs/`; active and intrusive tools stay
+locked behind an *Authorized* switch plus a scope note. No Flask, no pip install.
+
+See `reconx_gui/README.md` for the full details.
 
 Full Recon (Scriptable)
 
@@ -337,6 +356,11 @@ ReconX/
 │   └── utils/                   # Utilities
 │       ├── env_detect.py        # Environment detection
 │       └── http_client.py       # Differential analysis + WAF mutation engine
+│
+├── reconx_gui/                  # Browser UI for the same 38 tools (stdlib only)
+│   ├── server.py                # HTTP + SSE server, entrypoint
+│   ├── engine/                  # registry, bridge to modules/, builtins, jobs
+│   └── web/                     # index.html + static/app.js
 │
 ├── tests/                       # stdlib unittest suite (loopback only)
 │   ├── test_live_probe.py       # Prober parsing, probing, batches, reports
