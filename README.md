@@ -142,7 +142,7 @@ Interactive CLI (Recommended)
 python cli.py
 ```
 
-36 tools organized into 9 sections:
+38 tools organized into 11 sections:
 
 ```
 ── Recon Modules ──
@@ -376,7 +376,7 @@ Windows (native) ⚠️ Untested (use WSL)
 $ python recon.py example.com
 
 ╔══════════════════════════════════════════════════════════════════╗
-║           Comprehensive Web Recon  [DEEP MODE] v4              ║
+║           Comprehensive Web Recon  [DEEP MODE] v5.0              ║
 ╚══════════════════════════════════════════════════════════════════╝
 
   🎯 Target: example.com

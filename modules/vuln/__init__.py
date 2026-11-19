@@ -8,4 +8,4 @@ have explicit written permission to test.
 Unauthorized use is illegal in most jurisdictions.
 """
 
-__version__ = "1.0.0"
+__version__ = "5.0.0"

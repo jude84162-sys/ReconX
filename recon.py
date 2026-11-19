@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ReconX - Comprehensive Web Recon (v2 — Parallel)
+ReconX - Comprehensive Web Recon (v5.0 — Parallel)
 =================================================
 All-in-one web reconnaissance combining 8 tools:
   1. Domain OSINT
@@ -69,7 +69,7 @@ def banner(target, deep=True):
 ║  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║                     ║
 ║  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                     ║
 ║                                                                  ║
-║           Comprehensive Web Recon  [{mode} MODE] v4.1              ║
+║           Comprehensive Web Recon  [{mode} MODE] v5.0            ║
 ╚══════════════════════════════════════════════════════════════════╝{C.RESET}
 
 {C.BOLD}  🎯 Target:{C.RESET} {C.YELLOW}{target}{C.RESET}
@@ -1060,7 +1060,7 @@ def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ReconX - Comprehensive Web Recon v2 (parallel, multi-IP)",
+        description="ReconX - Comprehensive Web Recon v5.0 (parallel, multi-IP)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1086,7 +1086,7 @@ Examples:
                              "(saved to outputs/screenshots — needs Playwright or Chrome)")
     parser.add_argument("--quiet", "-q", action="store_true",
                         help="Quiet mode")
-    parser.add_argument("--version", action="version", version="ReconX v2.0.0")
+    parser.add_argument("--version", action="version", version="ReconX v5.0.0")
 
     args = parser.parse_args()
 

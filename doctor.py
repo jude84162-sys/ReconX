@@ -155,7 +155,7 @@ class ReconXDoctor:
                 
                 req = urllib.request.Request(
                     url, 
-                    headers={"Accept": accept_header, "User-Agent": "ReconX-Doctor/4.0"}
+                    headers={"Accept": accept_header, "User-Agent": "ReconX-Doctor/5.0"}
                 )
                 with urllib.request.urlopen(req, timeout=5) as response:
                     if response.status == 200:

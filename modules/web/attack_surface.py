@@ -156,7 +156,7 @@ class AttackSurfaceEngine:
 
     def run_recon_pipeline(self):
         print(f"\n{BLUE}╔══════════════════════════════════════════════════════════════════╗{RESET}")
-        print(f"{BLUE}║        ReconX Advanced Attack Surface & Vuln Engine v4.0        ║{RESET}")
+        print(f"{BLUE}║        ReconX Advanced Attack Surface & Vuln Engine v5.0        ║{RESET}")
         print(f"{BLUE}╚══════════════════════════════════════════════════════════════════╝{RESET}\n", flush=True)
         print(f"  🎯 Target Domain: {self.target}", flush=True)
         print(f"  📅 Execution Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n", flush=True)

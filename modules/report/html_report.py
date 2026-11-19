@@ -319,7 +319,7 @@ a:hover {{ text-decoration: underline; }}
     {''.join(sections) if sections else '<section><h2>No data</h2><p>Report is empty.</p></section>'}
 
     <footer>
-        ReconX v1.0.0 — Open Source OSINT Toolkit<br>
+        ReconX v5.0.0 — Open Source OSINT Toolkit<br>
         <a href="https://github.com/jude84162-sys/ReconX">github.com/jude84162-sys/ReconX</a>
     </footer>
 </div>
