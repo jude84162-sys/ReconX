@@ -1,0 +1,63 @@
+name: Release
+
+# Publishing a release is irreversible, so this workflow runs the test suite
+# against the tagged commit before creating anything on GitHub.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish release for tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it untouched."
+            exit 0
+          fi
+
+          # Prefer the notes file committed for this version (RELEASE_NOTES_v5.0.0.md).
+          notes="RELEASE_NOTES_${TAG}.md"
+          args=(--title "ReconX ${TAG}" --verify-tag)
+
+          if [ -f "$notes" ]; then
+            echo "Publishing with $notes"
+            args+=(--notes-file "$notes")
+          else
+            echo "No $notes found; generating notes from commits."
+            args+=(--generate-notes)
+          fi
+
+          # Tags like v5.1.0-rc1 publish as pre-releases.
+          case "$TAG" in
+            *-*) args+=(--prerelease) ;;
+          esac
+
+          gh release create "$TAG" "${args[@]}"
+          echo "Published: $(gh release view "$TAG" --json url --jq .url)"
