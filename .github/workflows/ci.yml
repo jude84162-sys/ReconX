@@ -135,3 +135,81 @@ jobs:
           done
           
           echo "✓ All required files present"
+
+  gui-smoke:
+    name: GUI Endpoints (v5.0.0 smoke)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Start GUI server
+        run: |
+          python reconx_gui/server.py --port 8777 --host 127.0.0.1 --no-browser > gui-server.log 2>&1 &
+          echo $! > gui-server.pid
+
+      - name: Smoke test GUI endpoints
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          import time
+          import urllib.request
+
+          BASE = "http://127.0.0.1:8777"
+          EXPECTED_TOOLS = 38
+          EXPECTED_CATEGORIES = 11
+
+          def get(path, timeout=5):
+              with urllib.request.urlopen(BASE + path, timeout=timeout) as r:
+                  return r.status, r.read()
+
+          # The server boots in a background step, so poll until it answers.
+          deadline = time.time() + 30
+          last_error = None
+          while time.time() < deadline:
+              try:
+                  status, body = get("/api/tools", timeout=3)
+                  if status == 200:
+                      break
+              except Exception as e:  # connection refused while booting
+                  last_error = e
+                  time.sleep(1)
+          else:
+              sys.exit(f"✗ GUI never became ready: {last_error}")
+
+          payload = json.loads(body)
+          tools, categories = payload["tools"], payload["categories"]
+          if len(tools) != EXPECTED_TOOLS:
+              sys.exit(f"✗ expected {EXPECTED_TOOLS} tools, got {len(tools)}")
+          if len(categories) != EXPECTED_CATEGORIES:
+              sys.exit(f"✗ expected {EXPECTED_CATEGORIES} categories, got {len(categories)}")
+          print(f"✓ /api/tools: {len(tools)} tools in {len(categories)} categories")
+
+          unbound = [t["id"] for t in tools if t.get("availability") != "module"]
+          if unbound:
+              sys.exit(f"✗ not bound to modules.*: {', '.join(unbound)}")
+          print(f"✓ all {EXPECTED_TOOLS} tools resolve to modules.*")
+
+          status, page = get("/")
+          if status != 200 or b"<html" not in page.lower():
+              sys.exit(f"✗ / returned {status} ({len(page)} bytes)")
+          print(f"✓ / serves {len(page)} bytes")
+          PY
+
+      - name: Server log
+        if: failure()
+        run: cat gui-server.log || true
+
+      - name: Stop GUI server
+        if: always()
+        run: |
+          if [ -f gui-server.pid ]; then
+            kill "$(cat gui-server.pid)" 2>/dev/null || true
+          fi
