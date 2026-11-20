@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scorpion.ai</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%A6%82%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">&#129410;</span>
+      <div class="brand-text">
+        <h1>Scorpion<span class="dot">.ai</span></h1>
+        <p class="tag">autonomous recon &amp; bug-bounty agent</p>
+      </div>
+    </div>
+    <div class="status-cluster">
+      <span class="pill" id="conn-pill" data-state="down" title="event stream">stream</span>
+      <span class="pill" id="brain-pill" title="LLM brain">brain</span>
+      <span class="pill" id="tg-pill" title="telegram notifier">telegram</span>
+      <span class="pill" id="run-pill" data-state="idle">idle</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- LEFT: controls -->
+    <section class="col col-controls">
+      <div class="card">
+        <h2>Scope</h2>
+        <p class="hint">Fail-closed: nothing is touched until a target matches the allow-list.</p>
+        <label for="scope-allow">Allow (one per line or comma-separated)</label>
+        <textarea id="scope-allow" rows="3" spellcheck="false"
+          placeholder="example.com&#10;*.example.com&#10;203.0.113.0/24"></textarea>
+        <label for="scope-deny">Deny</label>
+        <textarea id="scope-deny" rows="2" spellcheck="false"
+          placeholder="admin.example.com"></textarea>
+        <button id="scope-save" class="btn">Save scope</button>
+        <div id="scope-current" class="scope-current"></div>
+      </div>
+
+      <div class="card">
+        <h2>Engagement</h2>
+        <label for="target">Target</label>
+        <input id="target" type="text" spellcheck="false"
+          placeholder="https://app.example.com" />
+        <label for="goal">Goal (optional)</label>
+        <input id="goal" type="text" spellcheck="false"
+          placeholder="find auth bypass / exposed admin" />
+        <button id="start" class="btn btn-primary">Launch agent</button>
+        <p id="start-msg" class="start-msg"></p>
+      </div>
+
+      <div class="card meta-card">
+        <h2>Config</h2>
+        <dl id="config-meta" class="meta"></dl>
+      </div>
+    </section>
+
+    <!-- MIDDLE: live activity -->
+    <section class="col col-activity">
+      <div class="card activity-card">
+        <div class="activity-head">
+          <h2>Agent activity</h2>
+          <div class="activity-tools">
+            <label class="chk"><input type="checkbox" id="autoscroll" checked /> autoscroll</label>
+            <button id="clear-log" class="btn btn-ghost">clear</button>
+          </div>
+        </div>
+        <div id="log" class="log" role="log" aria-live="polite"></div>
+      </div>
+      <div class="card chat-card">
+        <h2>Talk to the agent</h2>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" type="text" autocomplete="off"
+            placeholder="steer the agent, ask a question&#8230;" />
+          <button class="btn" type="submit">send</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- RIGHT: findings + report -->
+    <section class="col col-results">
+      <div class="card findings-card">
+        <div class="activity-head">
+          <h2>Findings</h2>
+          <span id="findings-count" class="counter">0</span>
+        </div>
+        <div id="findings" class="findings"></div>
+      </div>
+      <div class="card report-card">
+        <div class="activity-head">
+          <h2>Report</h2>
+          <button id="copy-report" class="btn btn-ghost">copy</button>
+        </div>
+        <div id="report" class="report muted">No report yet &#8212; launch an engagement.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Scorpion.ai</span>
+    <span class="sep">&middot;</span>
+    <span>authorized testing only</span>
+    <span class="sep">&middot;</span>
+    <span>stdlib dashboard, no external code</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
