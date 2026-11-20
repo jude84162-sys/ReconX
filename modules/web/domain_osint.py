@@ -3,7 +3,6 @@
 Uses DoH for DNS + socket WHOIS + crt.sh with fallback.
 """
 
-import re
 import json
 import socket
 import ssl
@@ -13,7 +12,12 @@ import urllib.error
 import concurrent.futures
 from datetime import datetime
 
+from modules.utils.crtsh import crtsh_lookup
+
 logger = logging.getLogger("ReconX.domain")
+
+VERIFY_WORKERS = 100
+VERIFY_DEADLINE = 30
 
 
 # ============================================================
@@ -364,101 +368,85 @@ def _parse_whois(raw):
 # ============================================================
 
 def _crtsh_subdomains(domain, timeout=30):
-    """Get subdomains from crt.sh (JSON + HTML fallback)."""
-    subs = set()
+    """Get subdomains from crt.sh (JSON + HTML fallback, shared per process)."""
+    return crtsh_lookup(domain, timeout=timeout)
 
-    # Try JSON first
+
+# ============================================================
+# Subdomain Verification (parallel, deadline-bounded)
+# ============================================================
+
+def _verify_subdomains_ex(domain, subs, workers=VERIFY_WORKERS, timeout=3,
+                         deadline=VERIFY_DEADLINE):
+    """Resolve candidate subdomains in parallel.
+
+    Returns (verified entries, unverified hostnames). Names still unresolved
+    after ``deadline`` seconds are reported as unverified instead of holding
+    up the caller; ``deadline=None`` waits for every lookup.
+    """
+    suffix = f".{domain}"
+    hostnames = sorted({sub if sub.endswith(suffix) else f"{sub}{suffix}" for sub in subs})
+    if not hostnames:
+        return [], []
+
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(workers, len(hostnames))))
+    futures = {}
     try:
-        url = f"https://crt.sh/?q=%25.{domain}&output=json"
-        ctx = ssl.create_default_context()
-        req = urllib.request.Request(url, headers={"User-Agent": "ReconX/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
-            body = r.read().decode("utf-8", errors="ignore")
+        for hostname in hostnames:
+            futures[ex.submit(_resolve_a_only, hostname, timeout)] = hostname
+        concurrent.futures.wait(futures, timeout=deadline)
+    finally:
+        for future in futures:
+            future.cancel()
+        ex.shutdown(wait=False)
 
+    verified, unverified = [], []
+    for future, hostname in futures.items():
+        if not future.done() or future.cancelled():
+            unverified.append(hostname)
+            continue
         try:
-            data = json.loads(body)
-            for entry in data:
-                name = entry.get("name_value", "")
-                for n in name.split("\n"):
-                    n = n.strip().lower()
-                    if n.endswith(f".{domain}") and "*" not in n and n != domain:
-                        subs.add(n)
-            if subs:
-                return subs
-        except json.JSONDecodeError:
-            pass
-
-    except Exception as e:
-        logger.debug(f"crt.sh JSON failed: {e}")
-
-    # Fallback: HTML parsing
-    try:
-        url = f"https://crt.sh/?q=%25.{domain}"
-        ctx = ssl.create_default_context()
-        req = urllib.request.Request(url, headers={"User-Agent": "ReconX/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
-            body = r.read().decode("utf-8", errors="ignore")
-
-        pattern = rf"([a-zA-Z0-9_\-\.]+\.{re.escape(domain)})"
-        for match in re.finditer(pattern, body):
-            sub = match.group(1).lower().strip(".")
-            if "*" not in sub and sub != domain:
-                subs.add(sub)
-    except Exception as e:
-        logger.debug(f"crt.sh HTML failed: {e}")
-
-    return subs
-
-
-# ============================================================
-# Subdomain Verification (thread-safe + cache)
-# ============================================================
-
-def _verify_subdomains(domain, subs, workers=50):
-    """Verify subdomains in parallel with DNS cache."""
-    results = []
-    cache = {}
-
-    def check(sub):
-        hostname = f"{sub}.{domain}" if not sub.endswith(f".{domain}") else sub
-
-        # Cache hit
-        if hostname in cache:
-            return cache[hostname]
-
-        ip = _resolve_a_only(hostname, timeout=3)
+            ip = future.result()
+        except Exception:
+            ip = None
         if ip:
-            entry = {
+            verified.append({
                 "hostname": hostname,
                 "ip": ip,
                 "ipv4": [ip],
                 "ipv6": [],
-            }
-            cache[hostname] = entry
-            return entry
-        cache[hostname] = None
-        return None
+            })
+    return verified, sorted(unverified)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(check, sub): sub for sub in subs}
 
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                r = future.result(timeout=10)
-                if r:
-                    results.append(r)
-            except Exception:
-                pass
+def _verify_subdomains(domain, subs, workers=50, timeout=3, deadline=None):
+    """Verify subdomains in parallel (verified entries only)."""
+    return _verify_subdomains_ex(domain, subs, workers=workers, timeout=timeout,
+                                 deadline=deadline)[0]
 
-    return results
+
+def _stage_result(future, label, errors, default=None):
+    try:
+        value = future.result()
+    except Exception as e:
+        errors.append(f"{label}: {e}")
+        return default
+    return default if value is None else value
 
 
 # ============================================================
 # Main
 # ============================================================
 
-def run_domain_osint(domain, deep=False):
-    """Full domain recon — pure Python."""
+def run_domain_osint(domain, deep=False, workers=VERIFY_WORKERS,
+                     verify_deadline=VERIFY_DEADLINE, ips=None):
+    """Full domain recon — pure Python.
+
+    rDNS, DoH records, WHOIS and crt.sh run concurrently; subdomain
+    verification starts as soon as crt.sh answers. ``workers`` caps the
+    parallel DNS lookups used for verification and ``ips`` (the dict
+    returned by _resolve_all_ips) skips resolving the domain again.
+    """
     result = {
         "timestamp": datetime.now().isoformat(),
         "domain": domain,
@@ -467,36 +455,66 @@ def run_domain_osint(domain, deep=False):
         "dns_records": {},
         "whois": {},
         "subdomains": [],
+        "unverified": [],
         "sources_used": [],
         "errors": [],
     }
 
     # === 1. Resolve main domain ===
-    print(f"  [*] Resolving {domain}...")
-    ips = _resolve_all_ips(domain)
+    if ips is None:
+        print(f"  [*] Resolving {domain}...")
+        ips = _resolve_all_ips(domain)
+    elif isinstance(ips, dict):
+        ips = {"A": list(ips.get("A") or []), "AAAA": list(ips.get("AAAA") or [])}
+    else:
+        ips = {"A": list(ips), "AAAA": []}
     result["ips"] = ips
 
-    # === 2. Reverse DNS (parallel) ===
+    # === 2-5. Reverse DNS, DoH records, WHOIS and crt.sh (concurrent) ===
+    rdns_ips = ips["A"][:10]
     print(f"  [*] Reverse DNS lookup...")
-    if ips["A"]:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
-            futures = {ex.submit(_reverse_dns, ip): ip for ip in ips["A"][:10]}
-            for future in concurrent.futures.as_completed(futures):
-                ip = futures[future]
-                try:
-                    host = future.result(timeout=5)
-                    if host:
-                        result["reverse_dns"][ip] = host
-                except Exception:
-                    pass
-
-    # === 3. DNS records via DoH ===
     print(f"  [*] Fetching DNS records (DoH)...")
-    result["dns_records"] = _get_dns_records(domain)
-
-    # === 4. WHOIS via socket ===
     print(f"  [*] Querying WHOIS (socket)...")
-    whois_raw = _whois_socket(domain)
+    print(f"  [*] Querying Certificate Transparency (crt.sh)...")
+
+    stage_ex = concurrent.futures.ThreadPoolExecutor(max_workers=3 + len(rdns_ips))
+    try:
+        rdns_futures = {stage_ex.submit(_reverse_dns, ip): ip for ip in rdns_ips}
+        dns_future = stage_ex.submit(_get_dns_records, domain)
+        whois_future = stage_ex.submit(_whois_socket, domain)
+        crtsh_future = stage_ex.submit(_crtsh_subdomains, domain)
+
+        crtsh_subs = _stage_result(crtsh_future, "crt.sh", result["errors"], default=set())
+
+        # === 6. Brute force (if deep) ===
+        subs_to_check = set(crtsh_subs)
+        if deep:
+            print(f"  [*] Adding {len(COMMON_SUBDOMAINS)} brute-force words...")
+            subs_to_check.update(COMMON_SUBDOMAINS)
+
+        # === 7. Verify subdomains (parallel, bounded by a deadline) ===
+        if subs_to_check:
+            print(f"  [*] Verifying {len(subs_to_check)} subdomains...")
+            verified, unverified = _verify_subdomains_ex(
+                domain, subs_to_check, workers=workers, deadline=verify_deadline)
+            result["subdomains"] = sorted(verified, key=lambda x: x["hostname"])
+            result["unverified"] = unverified
+            if unverified:
+                result["errors"].append(
+                    f"verification: {len(unverified)} name(s) not resolved "
+                    f"within {verify_deadline}s")
+
+        for future, ip in rdns_futures.items():
+            host = _stage_result(future, f"reverse DNS {ip}", result["errors"])
+            if host:
+                result["reverse_dns"][ip] = host
+
+        result["dns_records"] = _stage_result(dns_future, "DoH", result["errors"], default={})
+
+        whois_raw = _stage_result(whois_future, "WHOIS", result["errors"])
+    finally:
+        stage_ex.shutdown(wait=False)
+
     if whois_raw:
         result["whois"] = _parse_whois(whois_raw)
         if result["whois"].get("registrar"):
@@ -504,23 +522,8 @@ def run_domain_osint(domain, deep=False):
     else:
         result["whois"] = _parse_whois(None)
 
-    # === 5. crt.sh subdomains ===
-    print(f"  [*] Querying Certificate Transparency (crt.sh)...")
-    crtsh_subs = _crtsh_subdomains(domain)
     if crtsh_subs:
         result["sources_used"].append(f"crt.sh ({len(crtsh_subs)} found)")
-
-    # === 6. Brute force (if deep) ===
-    subs_to_check = set(crtsh_subs)
-    if deep:
-        print(f"  [*] Adding {len(COMMON_SUBDOMAINS)} brute-force words...")
-        subs_to_check.update(COMMON_SUBDOMAINS)
-
-    # === 7. Verify subdomains (parallel + cache) ===
-    if subs_to_check:
-        print(f"  [*] Verifying {len(subs_to_check)} subdomains...")
-        verified = _verify_subdomains(domain, subs_to_check, workers=50)
-        result["subdomains"] = sorted(verified, key=lambda x: x["hostname"])
 
     return result
 
@@ -606,6 +609,9 @@ def print_domain_report(result):
             print(f"    ... and {len(subs) - 30} more")
     else:
         print(f"\n[!] No subdomains found")
+
+    if result.get("unverified"):
+        print(f"[!] {len(result['unverified'])} subdomain(s) not verified before the deadline")
 
     if result.get("sources_used"):
         print(f"\n[*] Sources: {', '.join(result['sources_used'])}")

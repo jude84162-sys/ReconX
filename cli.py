@@ -799,11 +799,11 @@ def all_vuln_menu():
     if not u:
         return
 
-    workers = prompt("  Workers", default="3")
+    workers = prompt("  Workers", default="6")
     try:
         workers = int(workers)
     except ValueError:
-        workers = 3
+        workers = None
 
     print(f"\n{C.YELLOW}  ⚡ Running ALL vuln scanners on {u}...{C.RESET}")
 
@@ -829,7 +829,7 @@ def full_web_recon_menu():
     banner()
     section("🎯 Full Web Recon")
 
-    print(f"  {C.GRAY}12 tools in parallel + auto HTML/TXT/JSON{C.RESET}\n")
+    print(f"  {C.GRAY}13 steps in parallel + auto HTML/TXT/JSON{C.RESET}\n")
 
     t = prompt("  Domain")
     if not t:
@@ -1104,11 +1104,11 @@ def live_probe_menu():
     if not targets:
         return
 
-    threads = prompt("  Threads", default="20")
+    threads = prompt("  Threads", default="50")
     try:
         threads = int(threads)
     except ValueError:
-        threads = 20
+        threads = 50
 
     timeout = prompt("  Timeout (seconds)", default="6")
     try:
@@ -1138,8 +1138,10 @@ def screenshot_menu():
     banner()
     section("📸 Screenshot Gallery (aquatone-style)")
 
+    default_workers = 3
     try:
-        from modules.web.aquatone_clone import backend_hint
+        from modules.web.aquatone_clone import DEFAULT_WORKERS, backend_hint
+        default_workers = DEFAULT_WORKERS
         print(f"  {C.GRAY}Backend: {backend_hint()}{C.RESET}")
     except Exception:
         pass
@@ -1154,11 +1156,11 @@ def screenshot_menu():
 
     outdir = prompt("  Output dir", default="outputs/screenshots")
 
-    workers = prompt("  Parallel captures", default="3")
+    workers = prompt("  Parallel captures", default=str(default_workers))
     try:
         workers = int(workers)
     except ValueError:
-        workers = 3
+        workers = default_workers
 
     try:
         from modules.web.aquatone_clone import (

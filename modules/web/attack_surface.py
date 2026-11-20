@@ -15,6 +15,8 @@ import ssl
 import socket
 import struct
 import hashlib
+import threading
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -28,6 +30,13 @@ YELLOW = "\033[93m"
 RED = "\033[91m"
 BLUE = "\033[94m"
 RESET = "\033[0m"
+
+# Body read caps: enough to detect a leak signature or parse an API answer,
+# never a whole archive or database dump.
+DEFAULT_MAX_BYTES = 20 * 1024 * 1024
+CDX_MAX_BYTES = 16 * 1024 * 1024
+PROBE_MAX_BYTES = 64 * 1024
+WAYBACK_LIMIT = 50000
 
 class TorSOCKS5Handler(urllib.request.BaseHandler):
     """Zero-dependency SOCKS5h / Tor proxy handler using raw socket handshakes."""
@@ -95,12 +104,19 @@ class TorSOCKS5Handler(urllib.request.BaseHandler):
             sock.sendall(http_req.encode("utf-8"))
 
             # Read response
+            cap = getattr(req, "_reconx_max_bytes", None)
             buf = bytearray()
+            header_end = -1
             while True:
                 data = sock.recv(8192)
                 if not data:
                     break
                 buf.extend(data)
+                if cap is not None:
+                    if header_end < 0:
+                        header_end = buf.find(b"\r\n\r\n")
+                    if header_end >= 0 and len(buf) - header_end - 4 >= cap:
+                        break
             sock.close()
 
             header_data, _, body_data = buf.partition(b"\r\n\r\n")
@@ -124,13 +140,17 @@ class TorSOCKS5Handler(urllib.request.BaseHandler):
             raise urllib.error.URLError(f"Tor Proxy Tunnel Error: {e}")
 
 class AttackSurfaceEngine:
-    def __init__(self, target, use_tor=False, discord_webhook=None, telegram_token=None, telegram_chat_id=None, delay=0.5):
+    def __init__(self, target, use_tor=False, discord_webhook=None, telegram_token=None, telegram_chat_id=None, delay=0.5,
+                 workers=3, wayback_limit=WAYBACK_LIMIT):
         self.target = target.replace("http://", "").replace("https://", "").strip("/")
         self.use_tor = use_tor
         self.discord_webhook = discord_webhook
         self.telegram_token = telegram_token
         self.telegram_chat_id = telegram_chat_id
         self.delay = delay
+        self.workers = workers
+        self.wayback_limit = wayback_limit
+        self._lock = threading.Lock()
         self.subdomains = set()
         self.endpoints = set()
         self.js_files = set()
@@ -144,15 +164,41 @@ class AttackSurfaceEngine:
         else:
             self.opener = urllib.request.build_opener()
 
-    def _request(self, url, headers=None):
+    def _request(self, url, headers=None, max_bytes=DEFAULT_MAX_BYTES):
+        code, body, _, _ = self._fetch(url, headers=headers, max_bytes=max_bytes)
+        return code, body
+
+    def _fetch(self, url, headers=None, max_bytes=DEFAULT_MAX_BYTES):
+        """Return ``(code, body, size, truncated)`` reading at most ``max_bytes``.
+
+        ``size`` is the declared Content-Length when present, otherwise the
+        number of bytes read (``len(body)`` of the error text on failure).
+        """
         if not headers:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconX/4.0"}
         try:
             req = urllib.request.Request(url, headers=headers)
+            req._reconx_max_bytes = max_bytes
             with self.opener.open(req, timeout=10) as resp:
-                return resp.code, resp.read().decode("utf-8", errors="ignore")
+                raw = resp.read(max_bytes) if max_bytes else resp.read()
+                truncated = bool(max_bytes) and len(raw) >= max_bytes
+                size = None
+                try:
+                    declared = (resp.headers or {}).get("content-length")
+                    if declared is not None:
+                        size = int(declared)
+                except (TypeError, ValueError, AttributeError):
+                    size = None
+                if size is None or size < len(raw):
+                    size = len(raw)
+                return resp.code, raw.decode("utf-8", errors="ignore"), size, truncated
         except Exception as e:
-            return 0, str(e)
+            msg = str(e)
+            return 0, msg, len(msg), False
+
+    def _say(self, message):
+        with self._lock:
+            print(message, flush=True)
 
     def run_recon_pipeline(self):
         print(f"\n{BLUE}╔══════════════════════════════════════════════════════════════════╗{RESET}")
@@ -161,13 +207,14 @@ class AttackSurfaceEngine:
         print(f"  🎯 Target Domain: {self.target}", flush=True)
         print(f"  📅 Execution Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n", flush=True)
 
-        # 1. Certificate Mining (crt.sh)
+        # 1. Certificate Mining (crt.sh) and 2. Wayback Machine & JS Harvesting
+        # query two unrelated services, so they run side by side.
         print(f"  {YELLOW}[1/4]{RESET} Mining wildcard SSL certificates via crt.sh...", flush=True)
-        self._mine_crtsh()
-
-        # 2. Wayback Machine & JS Harvesting
         print(f"  {YELLOW}[2/4]{RESET} Harvesting historical endpoints and JavaScript assets...", flush=True)
-        self._harvest_wayback()
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            futures = [ex.submit(self._mine_crtsh), ex.submit(self._harvest_wayback)]
+        for future in futures:
+            future.result()
 
         # 3. Parameter Classification Analysis
         print(f"  {YELLOW}[3/4]{RESET} Analyzing URL parameters for SSRF, SQLi, and XSS vectors...", flush=True)
@@ -189,42 +236,53 @@ class AttackSurfaceEngine:
         if code == 200:
             try:
                 data = json.loads(body)
+                found = set()
                 for entry in data:
                     name_value = entry.get("name_value", "")
                     for sub in name_value.split("\n"):
                         sub = sub.strip().lower()
                         if sub and sub.endswith(self.target) and "*" not in sub:
-                            self.subdomains.add(sub)
-                print(f"    {GREEN}[✓]{RESET} Discovered {len(self.subdomains)} unique subdomains from crt.sh", flush=True)
+                            found.add(sub)
+                with self._lock:
+                    self.subdomains.update(found)
+                self._say(f"    {GREEN}[✓]{RESET} Discovered {len(found)} unique subdomains from crt.sh")
             except Exception as e:
-                print(f"    {RED}[✗]{RESET} Failed to parse crt.sh JSON: {e}", flush=True)
+                self._say(f"    {RED}[✗]{RESET} Failed to parse crt.sh JSON: {e}")
         else:
-            print(f"    {RED}[✗]{RESET} crt.sh returned HTTP status {code}", flush=True)
+            self._say(f"    {RED}[✗]{RESET} crt.sh returned HTTP status {code}")
 
     def _harvest_wayback(self):
-        cdx_url = f"http://web.archive.org/cdx/search/cdx?url=*.{self.target}/*&output=json&collapse=urlkey"
-        code, body = self._request(cdx_url)
+        # Plain-text output with only the "original" column, one URL per line.
+        limit = f"&limit={int(self.wayback_limit)}" if self.wayback_limit else ""
+        cdx_url = (f"http://web.archive.org/cdx/search/cdx?url=*.{self.target}/*"
+                   f"&fl=original&collapse=urlkey{limit}")
+        code, body, _, truncated = self._fetch(cdx_url, max_bytes=CDX_MAX_BYTES)
         if code == 200:
             try:
-                rows = json.loads(body)
-                # Skip header row if present
-                if len(rows) > 1:
-                    rows = rows[1:]
-                for row in rows:
-                    if len(row) > 2:
-                        orig_url = row[2]
-                        self.endpoints.add(orig_url)
-                        parsed = urllib.parse.urlparse(orig_url)
-                        domain = parsed.netloc.lower()
-                        if domain.endswith(self.target):
-                            self.subdomains.add(domain)
-                        if parsed.path.endswith(".js"):
-                            self.js_files.add(orig_url)
-                print(f"    {GREEN}[✓]{RESET} Harvested {len(self.endpoints)} historical endpoints & {len(self.js_files)} JS assets", flush=True)
+                lines = body.split("\n")
+                if truncated and not body.endswith("\n"):
+                    lines = lines[:-1]
+                endpoints, subdomains, js_files = set(), set(), set()
+                for line in lines:
+                    orig_url = line.strip()
+                    if not orig_url:
+                        continue
+                    endpoints.add(orig_url)
+                    parsed = urllib.parse.urlparse(orig_url)
+                    domain = parsed.netloc.lower()
+                    if domain.endswith(self.target):
+                        subdomains.add(domain)
+                    if parsed.path.endswith(".js"):
+                        js_files.add(orig_url)
+                with self._lock:
+                    self.endpoints.update(endpoints)
+                    self.subdomains.update(subdomains)
+                    self.js_files.update(js_files)
+                self._say(f"    {GREEN}[✓]{RESET} Harvested {len(self.endpoints)} historical endpoints & {len(self.js_files)} JS assets")
             except Exception as e:
-                print(f"    {RED}[✗]{RESET} Failed to parse Wayback CDX data: {e}", flush=True)
+                self._say(f"    {RED}[✗]{RESET} Failed to parse Wayback CDX data: {e}")
         else:
-            print(f"    {RED}[✗]{RESET} Wayback CDX API returned status {code}", flush=True)
+            self._say(f"    {RED}[✗]{RESET} Wayback CDX API returned status {code}")
 
     def _classify_parameters(self):
         # High-risk parameter signatures for SSRF, SQLi, Reflected XSS
@@ -255,8 +313,8 @@ class AttackSurfaceEngine:
     def _fuzz_sensitive_files(self):
         # Baseline request for Soft-404 detection
         rand_token = hashlib.md5(str(datetime.now()).encode()).hexdigest()[:8]
-        baseline_code, baseline_body = self._request(f"https://{self.target}/{rand_token}.html")
-        baseline_len = len(baseline_body)
+        baseline_code, baseline_body, baseline_len, _ = self._fetch(
+            f"https://{self.target}/{rand_token}.html", max_bytes=PROBE_MAX_BYTES)
 
         sensitive_paths = [
             "/.env",
@@ -271,24 +329,38 @@ class AttackSurfaceEngine:
         ]
 
         base_url = f"https://{self.target}"
+        workers = max(1, min(int(self.workers or 1), len(sensitive_paths)))
+        results = {}
+
+        # Each worker walks its own share of the paths, pausing `delay`
+        # seconds between its requests to stay polite to the target.
+        def probe_share(share):
+            for i, path in enumerate(share):
+                if i and self.delay:
+                    time.sleep(self.delay)
+                target_url = base_url + path
+                code, body, size, _ = self._fetch(target_url, max_bytes=PROBE_MAX_BYTES)
+                results[path] = (target_url, code, body, size)
+
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = [ex.submit(probe_share, sensitive_paths[n::workers]) for n in range(workers)]
+        for future in futures:
+            future.result()
+
         for path in sensitive_paths:
-            target_url = base_url + path
-            code, body = self._request(target_url)
-            
+            target_url, code, body, size = results[path]
+
             # Soft-404 filter: status code must be 200 and body length/hash must significantly differ from random 404 page
-            if code == 200 and len(body) != baseline_len and "<html>" not in body[:50].lower():
+            if code == 200 and size != baseline_len and "<html>" not in body[:50].lower():
                 finding = {
                     "path": path,
                     "url": target_url,
                     "status": code,
-                    "size": len(body)
+                    "size": size
                 }
                 self.sensitive_findings.append(finding)
-                print(f"    {RED}[!] CRITICAL LEAK FOUND:{RESET} {target_url} (HTTP 200, Size: {len(body)})", flush=True)
-                self._send_alerts(f"🚨 **ReconX Critical Leak Alert!**\nTarget: `{target_url}`\nSize: `{len(body)} bytes`")
-            
-            import time
-            time.sleep(self.delay)
+                print(f"    {RED}[!] CRITICAL LEAK FOUND:{RESET} {target_url} (HTTP 200, Size: {size})", flush=True)
+                self._send_alerts(f"🚨 **ReconX Critical Leak Alert!**\nTarget: `{target_url}`\nSize: `{size} bytes`")
 
     def _send_alerts(self, message):
         # Dispatch Discord Webhook

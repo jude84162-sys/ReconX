@@ -17,7 +17,10 @@ from modules.utils.http_client import (
     base_url, compare_responses, is_meaningful_change, join_url, normalize_url,
     request, with_params,
 )
-from modules.vuln.advanced.base import add_finding, finalize, finding, new_result, print_report
+from modules.vuln.advanced.base import (
+    DEFAULT_WORKERS, add_finding, finalize, finding, new_result, parallel_map,
+    print_report,
+)
 
 API_SPEC_PATHS = [
     "/swagger.json", "/swagger.yaml", "/swagger.yml", "/swagger-ui.html",
@@ -152,29 +155,40 @@ def parse_spec(resp):
     return "yaml", endpoints
 
 
-def discover_specs(target, timeout=8, verbose=False):
+def discover_specs(target, timeout=8, verbose=False, workers=DEFAULT_WORKERS):
     base = normalize_url(target)
-    found = []
-    seen = set()
+    # Build the probe list once, deduplicated, keeping path order.
+    urls, seen = [], set()
     for path in ["", *API_SPEC_PATHS]:
         url = join_url(base, path) if path else base
         if url in seen:
             continue
         seen.add(url)
+        urls.append(url)
+
+    def probe(url):
         resp = request(url, timeout=timeout)
         kind = _looks_like_spec(resp)
         if not kind:
-            continue
+            return None
         try:
             parsed_kind, endpoints = parse_spec(resp)
         except Exception as e:
             if verbose:
                 print(f"    ✗ Could not parse {url}: {e}")
+            return None
+        return {"url": url, "kind": parsed_kind, "bytes": len(resp.body),
+                "endpoints": endpoints}
+
+    # parallel_map keeps probe order, so "first 3 specs in path order" is preserved.
+    found = []
+    for spec in parallel_map(urls, probe, workers=workers):
+        if not spec:
             continue
-        found.append({"url": url, "kind": parsed_kind, "bytes": len(resp.body),
-                      "endpoints": endpoints})
+        found.append(spec)
         if verbose:
-            print(f"    [+] {parsed_kind} spec: {url} ({len(endpoints)} endpoints)")
+            print(f"    [+] {spec['kind']} spec: {spec['url']} "
+                  f"({len(spec['endpoints'])} endpoints)")
         if len(found) >= 3:
             break
     return found
@@ -213,72 +227,90 @@ def _error_signature(body):
     return [sig for sig in ERROR_SIGNATURES if sig in low]
 
 
-def fuzz_endpoints(base, endpoints, timeout=10, verbose=False, result=None):
+def _fuzz_one_endpoint(base, ep, timeout, verbose):
+    """Fuzz every tested parameter of one endpoint. Returns (tested, [finding, ...])."""
     tested = 0
-    for ep in endpoints[:MAX_ENDPOINTS]:
-        if ep["method"] not in ("GET", "HEAD", "OPTIONS"):
-            continue
-        params = [p for p in ep.get("params") or [] if p.get("in") in ("query", "path")]
-        for param in params[:MAX_PARAMS]:
-            path, query = _build(ep, param, _sample_value(param))
-            baseline_url = join_url(base, path)
-            if query:
-                baseline_url = with_params(baseline_url, query)
-            baseline = request(baseline_url, timeout=timeout)
+    findings = []
+    if ep["method"] not in ("GET", "HEAD", "OPTIONS"):
+        return tested, findings
+    params = [p for p in ep.get("params") or [] if p.get("in") in ("query", "path")]
+    for param in params[:MAX_PARAMS]:
+        path, query = _build(ep, param, _sample_value(param))
+        baseline_url = join_url(base, path)
+        if query:
+            baseline_url = with_params(baseline_url, query)
+        baseline = request(baseline_url, timeout=timeout)
+        tested += 1
+        if baseline.error or (baseline.status or 0) >= 500:
+            continue  # endpoint already broken; skip to avoid noise
+
+        for label, payload in TYPE_PAYLOADS:
+            test_path, test_query = _build(ep, param, payload)
+            test_url = join_url(base, test_path)
+            if test_query:
+                test_url = with_params(test_url, test_query)
+            test = request(test_url, timeout=timeout)
             tested += 1
-            if baseline.error or (baseline.status or 0) >= 500:
-                continue  # endpoint already broken; skip to avoid noise
+            if test.error:
+                continue
 
-            for label, payload in TYPE_PAYLOADS:
-                test_path, test_query = _build(ep, param, payload)
-                test_url = join_url(base, test_path)
-                if test_query:
-                    test_url = with_params(test_url, test_query)
-                test = request(test_url, timeout=timeout)
-                tested += 1
-                if test.error:
-                    continue
+            diff = compare_responses(baseline, test)
+            sigs = _error_signature(test.body)
+            server_error = (test.status or 0) >= 500
+            if not (server_error or sigs):
+                continue
+            if not is_meaningful_change(diff) and not sigs:
+                continue
 
-                diff = compare_responses(baseline, test)
-                sigs = _error_signature(test.body)
-                server_error = (test.status or 0) >= 500
-                if not (server_error or sigs):
-                    continue
-                if not is_meaningful_change(diff) and not sigs:
-                    continue
+            evidence = (f"{label} value for '{param['name']}' -> HTTP {test.status}"
+                        f" (baseline {baseline.status})")
+            if sigs:
+                evidence += f"; error leak: {', '.join(sigs[:3])}"
+            findings.append(finding(
+                f"api_type_mismatch_{param['name']}",
+                f"API rejects malformed '{param['name']}' with unhandled error",
+                "high" if sigs else "medium",
+                test_url,
+                evidence,
+                description=("A type-confused value crashed or leaked internals instead of "
+                             "returning a 4xx validation error. This indicates missing "
+                             "input validation and often precedes SQLi/NoSQLi."),
+                remediation=("Validate and coerce parameter types server-side; return a "
+                             "generic 400 and suppress stack traces."),
+                confidence=0.85 if sigs else 0.6,
+                bug_class="improper_input_validation",
+                parameter=param["name"],
+                source="api_fuzzer",
+            ))
+            if verbose:
+                print(f"    [!] {param['name']} ({label}) -> HTTP {test.status}")
+            break
+    return tested, findings
 
-                evidence = (f"{label} value for '{param['name']}' -> HTTP {test.status}"
-                            f" (baseline {baseline.status})")
-                if sigs:
-                    evidence += f"; error leak: {', '.join(sigs[:3])}"
-                add_finding(result, finding(
-                    f"api_type_mismatch_{param['name']}",
-                    f"API rejects malformed '{param['name']}' with unhandled error",
-                    "high" if sigs else "medium",
-                    test_url,
-                    evidence,
-                    description=("A type-confused value crashed or leaked internals instead of "
-                                 "returning a 4xx validation error. This indicates missing "
-                                 "input validation and often precedes SQLi/NoSQLi."),
-                    remediation=("Validate and coerce parameter types server-side; return a "
-                                 "generic 400 and suppress stack traces."),
-                    confidence=0.85 if sigs else 0.6,
-                    bug_class="improper_input_validation",
-                    parameter=param["name"],
-                    source="api_fuzzer",
-                ))
-                if verbose:
-                    print(f"    [!] {param['name']} ({label}) -> HTTP {test.status}")
-                break
+
+def fuzz_endpoints(base, endpoints, timeout=10, verbose=False, result=None,
+                   workers=DEFAULT_WORKERS):
+    eps = list(endpoints[:MAX_ENDPOINTS])
+    outcomes = parallel_map(
+        eps, lambda ep: _fuzz_one_endpoint(base, ep, timeout, verbose), workers=workers)
+
+    tested = 0
+    for outcome in outcomes:  # endpoint order preserved
+        if not outcome:
+            continue
+        ep_tested, ep_findings = outcome
+        tested += ep_tested
+        for item in ep_findings:
+            add_finding(result, item)
     return tested
 
 
-def scan(target, timeout=10, verbose=False):
+def scan(target, timeout=10, verbose=False, workers=DEFAULT_WORKERS):
     target = normalize_url(target)
     result = new_result(target, discovered_specs=[], tested=0)
     result["checks_run"].append("spec_discovery")
 
-    specs = discover_specs(target, timeout=timeout, verbose=verbose)
+    specs = discover_specs(target, timeout=timeout, verbose=verbose, workers=workers)
     result["discovered_specs"] = [s["url"] for s in specs]
 
     if specs:
@@ -304,7 +336,8 @@ def scan(target, timeout=10, verbose=False):
             if spec["kind"] == "postman":
                 continue  # Postman paths often reference external hosts
             result["tested"] += fuzz_endpoints(base, spec["endpoints"], timeout=timeout,
-                                               verbose=verbose, result=result)
+                                               verbose=verbose, result=result,
+                                               workers=workers)
     else:
         result["note"] = "No API spec found; point the scanner at the API base URL"
         if verbose:

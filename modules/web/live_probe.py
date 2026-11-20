@@ -27,6 +27,8 @@ USER_AGENT = (
 
 BODY_LIMIT = 200_000
 MAX_REDIRECTS = 5
+CONNECT_TIMEOUT = 3
+DEFAULT_THREADS = 50
 REDIRECT_CODES = {301, 302, 303, 307, 308}
 
 C_CYAN = "\033[96m"
@@ -50,8 +52,28 @@ def _ssl_context():
     return ctx
 
 
-def _request(url, timeout=6):
-    """One HTTP GET. Returns dict with status/headers/body/tls or raises."""
+class _ConnectTimeout(socket.timeout):
+    """The TCP handshake did not complete within the connect timeout."""
+
+
+def _connector(connect_timeout):
+    """socket.create_connection replacement: short connect, then the read timeout."""
+    def create(address, timeout=None, source_address=None):
+        try:
+            sock = socket.create_connection(address, connect_timeout, source_address)
+        except socket.timeout as e:
+            raise _ConnectTimeout(str(e) or "timed out")
+        sock.settimeout(timeout)
+        return sock
+    return create
+
+
+def _request(url, timeout=6, connect_timeout=None):
+    """One HTTP GET. Returns dict with status/headers/body/tls or raises.
+
+    connect_timeout bounds only the TCP handshake (None: use timeout); the
+    TLS handshake and reads still get the full timeout.
+    """
     parts = urllib.parse.urlsplit(url)
     if parts.scheme not in ("http", "https"):
         raise ValueError(f"unsupported scheme: {parts.scheme}")
@@ -70,6 +92,10 @@ def _request(url, timeout=6):
         conn = http.client.HTTPConnection(
             parts.hostname, parts.port or 80, timeout=timeout
         )
+    if connect_timeout is not None:
+        if timeout is not None:
+            connect_timeout = min(connect_timeout, timeout)
+        conn._create_connection = _connector(connect_timeout)
 
     started = time.time()
     try:
@@ -114,13 +140,13 @@ def _request(url, timeout=6):
             pass
 
 
-def _follow(url, timeout=6, follow_redirects=True):
+def _follow(url, timeout=6, follow_redirects=True, connect_timeout=None):
     """Request a URL, optionally following redirects. Returns (final, chain)."""
     chain = []
     current = url
 
     for _ in range(MAX_REDIRECTS + 1):
-        resp = _request(current, timeout=timeout)
+        resp = _request(current, timeout=timeout, connect_timeout=connect_timeout)
         entry = {
             "url": current,
             "status": resp["status"],
@@ -194,8 +220,18 @@ def normalize_host(entry):
 # Probe
 # ============================================================
 
-def probe_host(target, timeout=6, follow_redirects=True):
-    """Probe one host over HTTPS then HTTP. Always returns a dict."""
+def probe_host(target, timeout=6, follow_redirects=True, connect_timeout=None):
+    """Probe one host over HTTPS then HTTP. Always returns a dict.
+
+    connect_timeout (seconds) caps the TCP handshake separately from the read
+    timeout; None keeps the full timeout for both.
+    """
+    return _probe(target, timeout, follow_redirects, connect_timeout)[0]
+
+
+def _probe(target, timeout=6, follow_redirects=True, connect_timeout=None,
+           stop_on_connect_timeout=False):
+    """probe_host() plus a flag: True when every attempt died in the TCP handshake."""
     host = normalize_host(target)
     result = {
         "input": host,
@@ -217,21 +253,32 @@ def probe_host(target, timeout=6, follow_redirects=True):
     }
     if not host:
         result["errors"].append("empty target")
-        return result
+        return result, False
 
+    connect_only = True
     for url in _candidate_urls(host):
         try:
-            resp, chain = _follow(url, timeout=timeout, follow_redirects=follow_redirects)
+            resp, chain = _follow(url, timeout=timeout, follow_redirects=follow_redirects,
+                                  connect_timeout=connect_timeout)
+        except _ConnectTimeout:
+            result["errors"].append(f"{url}: connect timeout")
+            if stop_on_connect_timeout:
+                break
+            continue
         except (socket.timeout, TimeoutError):
+            connect_only = False
             result["errors"].append(f"{url}: timeout")
             continue
         except ssl.SSLError as e:
+            connect_only = False
             result["errors"].append(f"{url}: tls {str(e)[:80]}")
             continue
         except ConnectionError:
+            connect_only = False
             result["errors"].append(f"{url}: connection refused/reset")
             continue
         except Exception as e:
+            connect_only = False
             result["errors"].append(f"{url}: {str(e)[:100]}")
             continue
 
@@ -253,13 +300,40 @@ def probe_host(target, timeout=6, follow_redirects=True):
             "tls": resp["tls"],
             "elapsed_ms": resp["elapsed_ms"],
         })
-        return result
+        return result, False
 
-    return result
+    return result, connect_only and bool(result["errors"])
 
 
-def probe_hosts(targets, threads=20, timeout=6, follow_redirects=True, verbose=False):
-    """Probe many hosts in parallel and return the httpx-style summary."""
+def _probe_many(hosts, threads, verbose, **kwargs):
+    """Run _probe over hosts in a thread pool. Returns {host: (entry, connect_only)}."""
+    done = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
+        futures = {ex.submit(_probe, h, **kwargs): h for h in hosts}
+        for future in concurrent.futures.as_completed(futures):
+            host = futures[future]
+            try:
+                entry, connect_only = future.result()
+            except Exception as e:
+                entry, connect_only = {
+                    "input": host, "alive": False,
+                    "errors": [str(e)[:100]],
+                }, False
+            done[host] = (entry, connect_only)
+            if verbose and entry.get("alive"):
+                print(f"      {C_GREEN}✓{C_RST} {entry['url']:<55} [{entry['status']}]")
+    return done
+
+
+def probe_hosts(targets, threads=DEFAULT_THREADS, timeout=6, follow_redirects=True,
+                verbose=False, connect_timeout=None, recheck=True):
+    """Probe many hosts in parallel and return the httpx-style summary.
+
+    The TCP handshake is capped at connect_timeout (default CONNECT_TIMEOUT)
+    so filtered hosts fail fast. With recheck, hosts that only failed in the
+    handshake get one more try with the full timeout, so slow-to-accept hosts
+    are not reported dead.
+    """
     hosts = _dedupe(targets)
     result = {
         "timestamp": datetime.now().isoformat(),
@@ -271,25 +345,32 @@ def probe_hosts(targets, threads=20, timeout=6, follow_redirects=True, verbose=F
     if not hosts:
         return result
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
-        futures = {
-            ex.submit(probe_host, h, timeout, follow_redirects): h for h in hosts
-        }
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                entry = future.result()
-            except Exception as e:
-                entry = {
-                    "input": futures[future], "alive": False,
-                    "errors": [str(e)[:100]],
-                }
-            result["results"].append(entry)
+    if connect_timeout is None:
+        connect_timeout = CONNECT_TIMEOUT
+    if timeout is not None:
+        connect_timeout = min(connect_timeout, timeout)
+
+    done = _probe_many(hosts, threads, verbose, timeout=timeout,
+                       follow_redirects=follow_redirects,
+                       connect_timeout=connect_timeout)
+
+    slow = [h for h, (_, connect_only) in done.items() if connect_only]
+    if recheck and slow and (timeout is None or connect_timeout < timeout):
+        again = _probe_many(slow, threads, verbose, timeout=timeout,
+                            follow_redirects=follow_redirects,
+                            connect_timeout=timeout,
+                            stop_on_connect_timeout=True)
+        for host, (entry, _) in again.items():
             if entry.get("alive"):
-                result["alive"] += 1
-            else:
-                result["dead"] += 1
-            if verbose and entry.get("alive"):
-                print(f"      {C_GREEN}✓{C_RST} {entry['url']:<55} [{entry['status']}]")
+                done[host] = (entry, False)
+
+    for host in hosts:
+        entry = done[host][0]
+        result["results"].append(entry)
+        if entry.get("alive"):
+            result["alive"] += 1
+        else:
+            result["dead"] += 1
 
     result["results"].sort(
         key=lambda r: (not r.get("alive"), r.get("status") or 0, r.get("input") or "")
@@ -366,7 +447,7 @@ def main():
     parser.add_argument("hosts", nargs="*", help="Hostnames or URLs")
     parser.add_argument("-f", "--file", help="File with one host per line")
     parser.add_argument("--json", action="store_true", help="Save JSON report")
-    parser.add_argument("--threads", type=int, default=20)
+    parser.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     parser.add_argument("--timeout", type=int, default=6)
     parser.add_argument("--no-follow", action="store_true",
                         help="Do not follow redirects")

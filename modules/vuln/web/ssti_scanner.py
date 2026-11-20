@@ -3,6 +3,7 @@
 
 import ssl
 import logging
+import concurrent.futures
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -65,12 +66,17 @@ def _make_ctx():
     return ctx
 
 
+# One shared SSL context, reused across all requests (and threads) instead of
+# rebuilding one per fetch.
+_SSL_CTX = _make_ctx()
+
+
 def _fetch(url, timeout=10):
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0",
         })
-        with urllib.request.urlopen(req, timeout=timeout, context=_make_ctx()) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as r:
             return r.status, r.read(100000).decode("utf-8", errors="ignore")
     except urllib.error.HTTPError as e:
         try:
@@ -137,8 +143,46 @@ def test_ssti(url, param, timeout=10, verbose=False):
     return findings
 
 
-def scan(target, params=None, timeout=10, verbose=False):
-    """Full SSTI scan."""
+def _test_payload(url, param, payload, expected, engine, base_body, timeout=10):
+    """Test a single SSTI payload against a param given its baseline body."""
+    test_url = _build_url(url, param, payload)
+    status, body = _fetch(test_url, timeout=timeout)
+
+    if status is None or not body:
+        return None
+
+    # Detection: expected result appears + payload doesn't appear raw
+    # (If payload appears raw, it's just reflection, not evaluation)
+    if expected in body and payload not in body:
+        # Extra validation: baseline didn't have this
+        if expected not in base_body:
+            return {
+                "id": f"ssti_{param}_{engine.replace(' ', '_').lower()}",
+                "title": f"SSTI in '{param}' ({engine})",
+                "parameter": param,
+                "engine": engine,
+                "payload": payload,
+                "expected_result": expected,
+                "severity": "critical",
+                "bug_class": "ssti",
+                "payout_potential": "$1000-$10000+",
+                "confidence": 0.90,
+                "url": test_url,
+                "evidence": f"Payload '{payload}' evaluated to '{expected}'",
+                "source": "custom_ssti",
+            }
+    return None
+
+
+def scan(target, params=None, timeout=10, verbose=False, workers=5):
+    """Full SSTI scan.
+
+    Per-param baselines and the (param x payload) matrix are probed through a
+    small ThreadPoolExecutor (``workers`` kwarg, default 5). Output is
+    preserved: at most one finding per param, selected from the lowest-indexed
+    matching payload (the same engine the original break-on-first loop
+    reported), returned in param order.
+    """
     result = {
         "timestamp": datetime.now().isoformat(),
         "target": target,
@@ -158,14 +202,56 @@ def scan(target, params=None, timeout=10, verbose=False):
         return result
 
     result["tested_params"] = len(params)
+    result["tested_payloads"] = len(params) * len(SSTI_PAYLOADS)
 
-    for param in params:
-        if verbose:
+    if verbose:
+        for param in params:
             print(f"    [*] Testing param: {param}")
 
-        findings = test_ssti(target, param, timeout=timeout, verbose=verbose)
-        result["tested_payloads"] += len(SSTI_PAYLOADS)
-        result["findings"].extend(findings)
+    w = max(1, int(workers) if workers else 1)
+
+    # Phase 1: per-param baselines (parallel).
+    baselines = {}
+    bw = max(1, min(w, len(params)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=bw) as ex:
+        futs = {ex.submit(_baseline, target, param, timeout=timeout): param
+                for param in params}
+        for fut in concurrent.futures.as_completed(futs):
+            param = futs[fut]
+            try:
+                _, base_body = fut.result()
+            except Exception:
+                base_body = ""
+            baselines[param] = base_body or ""
+
+    # Phase 2: (param, payload) evaluation (parallel).
+    tasks = []
+    for pi, param in enumerate(params):
+        for yi, (payload, expected, engine) in enumerate(SSTI_PAYLOADS):
+            tasks.append((pi, param, yi, payload, expected, engine))
+
+    best = {}  # param index -> (payload index, finding)
+    tw = max(1, min(w, len(tasks)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=tw) as ex:
+        futs = {
+            ex.submit(_test_payload, target, param, payload, expected, engine,
+                      baselines.get(param, ""), timeout): (pi, yi)
+            for (pi, param, yi, payload, expected, engine) in tasks
+        }
+        for fut in concurrent.futures.as_completed(futs):
+            pi, yi = futs[fut]
+            try:
+                finding = fut.result()
+            except Exception:
+                finding = None
+            if finding:
+                cur = best.get(pi)
+                if cur is None or yi < cur[0]:
+                    best[pi] = (yi, finding)
+
+    for pi in range(len(params)):
+        if pi in best:
+            result["findings"].append(best[pi][1])
 
     return result
 

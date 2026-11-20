@@ -25,7 +25,9 @@ def run_subdomain_enum(domain, use_clone=True, use_bruteforce=True):
         "subdomains": [],
         "by_source": {},
         "total_unique": 0,
-        "errors": []
+        "errors": [],
+        "wildcard": False,
+        "wildcard_ips": [],
     }
 
     if not HAS_CLONE:
@@ -44,6 +46,8 @@ def run_subdomain_enum(domain, use_clone=True, use_bruteforce=True):
 
     result["by_source"] = clone_result.get("by_source", {})
     result["errors"] = clone_result.get("errors", [])
+    result["wildcard"] = clone_result.get("wildcard", False)
+    result["wildcard_ips"] = clone_result.get("wildcard_ips", [])
 
     # Build subdomains list
     for sub in clone_result.get("subdomains", []):
@@ -65,6 +69,9 @@ def print_subdomain_report(result):
 
     print(f"\n[*] Domain: {result.get('domain')}")
     print(f"[*] Found:  {result.get('total_unique', 0)} subdomains")
+    if result.get("wildcard"):
+        print(f"[!] Wildcard DNS: {', '.join(result.get('wildcard_ips', [])[:3])} "
+              f"(brute-force hits pointing there were dropped)")
 
     if result.get("by_source"):
         print(f"\n[*] By Source:")

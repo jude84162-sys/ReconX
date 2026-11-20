@@ -4,6 +4,8 @@
 import re, ssl, logging, urllib.request, urllib.error, concurrent.futures
 from datetime import datetime
 
+from modules.utils.http_client import open_request
+
 logger = logging.getLogger("ReconX.register_finder")
 
 REGISTER_PATHS = [
@@ -52,7 +54,7 @@ def _fetch(url, timeout=8):
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0",
             "Accept": "text/html,application/xhtml+xml,*/*",
         })
-        with urllib.request.urlopen(req, timeout=timeout, context=_make_ctx()) as r:
+        with open_request(req, timeout=timeout) as r:
             return r.status, r.read(80000).decode("utf-8", errors="ignore"), r.url
     except urllib.error.HTTPError as e:
         try: body = e.read(30000).decode("utf-8", errors="ignore")

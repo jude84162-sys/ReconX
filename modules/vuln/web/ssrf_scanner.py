@@ -3,6 +3,7 @@
 
 import ssl
 import logging
+import concurrent.futures
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -125,8 +126,15 @@ def test_ssrf(url, param, payload, detection_kw, timeout=10):
     return None
 
 
-def scan(target, params=None, timeout=10, verbose=False):
-    """Full SSRF scan."""
+def scan(target, params=None, timeout=10, verbose=False, workers=5):
+    """Full SSRF scan.
+
+    The (param x payload) matrix is probed through a small ThreadPoolExecutor
+    (``workers`` kwarg, default 5) instead of serially. Output is preserved:
+    at most one finding per param, selected from the lowest-indexed matching
+    payload (the same payload the original break-on-first loop reported), and
+    findings are returned in param order.
+    """
     result = {
         "timestamp": datetime.now().isoformat(),
         "target": target,
@@ -148,18 +156,41 @@ def scan(target, params=None, timeout=10, verbose=False):
 
     result["tested_params"] = len(params)
 
-    for param in params:
-        for payload, detection_kw, desc in SSRF_PAYLOADS:
-            result["tested_payloads"] += 1
+    # Build the full (param, payload) task list, remembering positions so we
+    # can reconstruct deterministic "first match per param" ordering.
+    tasks = []
+    for pi, param in enumerate(params):
+        for yi, (payload, detection_kw, desc) in enumerate(SSRF_PAYLOADS):
+            tasks.append((pi, param, yi, payload, detection_kw, desc))
 
-            finding = test_ssrf(target, param, payload, detection_kw, timeout=timeout)
+    result["tested_payloads"] = len(tasks)
 
+    best = {}  # param index -> (payload index, finding, desc)
+    w = max(1, min(int(workers) if workers else 1, len(tasks)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=w) as ex:
+        futs = {
+            ex.submit(test_ssrf, target, param, payload, detection_kw,
+                      timeout=timeout): (pi, yi, desc)
+            for (pi, param, yi, payload, detection_kw, desc) in tasks
+        }
+        for fut in concurrent.futures.as_completed(futs):
+            pi, yi, desc = futs[fut]
+            try:
+                finding = fut.result()
+            except Exception:
+                finding = None
             if finding:
-                finding["description"] = desc
-                result["findings"].append(finding)
-                if verbose:
-                    print(f"    🔴 {desc} via '{param}'")
-                break  # One finding per param
+                cur = best.get(pi)
+                if cur is None or yi < cur[0]:
+                    best[pi] = (yi, finding, desc)
+
+    for pi in range(len(params)):
+        if pi in best:
+            _, finding, desc = best[pi]
+            finding["description"] = desc
+            result["findings"].append(finding)
+            if verbose:
+                print(f"    🔴 {desc} via '{params[pi]}'")
 
     return result
 

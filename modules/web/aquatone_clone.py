@@ -18,6 +18,7 @@ import base64
 import html
 import json
 import os
+import queue
 import re
 import shutil
 import socket
@@ -49,6 +50,18 @@ CHROME_NAMES = [
     "google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
     "chrome", "microsoft-edge", "msedge", "brave-browser",
 ]
+
+# Each capture is a browser process (~100-300 MB), so stay well below RAM limits.
+DEFAULT_WORKERS = max(3, min(8, os.cpu_count() or 2))
+PROBE_THREADS = 50
+PROBE_TIMEOUT = 6
+SETTLE_MS = 2000
+
+_HEADLESS_FLAG_ERROR = re.compile(
+    r"(unknown|unrecogni[sz]ed|invalid|unsupported|not supported)[^\n]*headless"
+    r"|headless[^\n]*(unknown|unrecogni[sz]ed|invalid|unsupported|not supported)",
+    re.I,
+)
 
 
 # ============================================================
@@ -146,16 +159,24 @@ def _safe_name(value):
     return (name or "host")[:80]
 
 
-def _prepare_jobs(targets, timeout, verbose):
+def _prepare_jobs(targets, timeout, verbose, threads=PROBE_THREADS):
     """Resolve each target to a live URL; dead hosts get a skipped entry."""
     prepared, skipped = [], []
+    targets = _dedupe(targets)
 
-    for target in _dedupe(targets):
+    probes = {}
+    bare = [t for t in targets if "://" not in t]
+    if bare:
+        found = live_probe.probe_hosts(bare, threads=threads,
+                                       timeout=min(timeout, PROBE_TIMEOUT))
+        probes = {r.get("input"): r for r in found.get("results", [])}
+
+    for target in targets:
         if "://" in target:
             url = target
             probe = None
         else:
-            probe = live_probe.probe_host(target, timeout=min(timeout, 8))
+            probe = probes.get(target) or {}
             if not probe.get("alive"):
                 reason = (probe.get("errors") or ["no HTTP(S) response"])[-1]
                 skipped.append({
@@ -263,56 +284,105 @@ def _auth_summary(headers, cookies):
 # Captures
 # ============================================================
 
-def _capture_playwright(jobs, width, height, timeout, full_page, verbose,
-                        headers=None, cookies=None):
-    from playwright.sync_api import sync_playwright
-
-    done = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            ignore_https_errors=True,
-            user_agent=UA,
-            viewport={"width": width, "height": height},
-            extra_http_headers=headers or {},
-        )
-        for job in jobs:
-            page = context.new_page()
+def _playwright_shot(context, job, timeout, full_page, verbose, cookies):
+    page = context.new_page()
+    try:
+        if cookies:
+            context.add_cookies([
+                {"name": c["name"], "value": c["value"], "url": job["url"]}
+                for c in cookies
+            ])
+        resp = page.goto(job["url"], wait_until="domcontentloaded",
+                         timeout=timeout * 1000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=SETTLE_MS)
+        except Exception:
+            pass
+        page.screenshot(path=str(job["path"]), full_page=full_page)
+        job["status"] = "captured"
+        job["status_code"] = resp.status if resp else None
+        if not job.get("title"):
             try:
-                if cookies:
-                    context.add_cookies([
-                        {"name": c["name"], "value": c["value"], "url": job["url"]}
-                        for c in cookies
-                    ])
-                resp = page.goto(job["url"], wait_until="domcontentloaded",
-                                 timeout=timeout * 1000)
-                try:
-                    page.wait_for_timeout(1500)
-                except Exception:
-                    pass
-                page.screenshot(path=str(job["path"]), full_page=full_page)
-                job["status"] = "captured"
-                job["status_code"] = resp.status if resp else None
-                if not job.get("title"):
+                job["title"] = (page.title() or "").strip()[:120] or None
+            except Exception:
+                pass
+        if verbose:
+            print(f"      {C_GREEN}✓{C_RST} {job['url']}")
+    except Exception as e:
+        job["status"] = "failed"
+        job["error"] = str(e)[:160]
+        if verbose:
+            print(f"      {C_RED}✗{C_RST} {job['url']} — {job['error'][:70]}")
+    finally:
+        try:
+            page.close()
+        except Exception:
+            pass
+
+
+def _playwright_worker(sync_playwright, pending, failures, width, height, timeout,
+                       full_page, verbose, headers, cookies):
+    """One Playwright instance + browser per thread (the sync API is not thread-safe)."""
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                context = browser.new_context(
+                    ignore_https_errors=True,
+                    user_agent=UA,
+                    viewport={"width": width, "height": height},
+                    extra_http_headers=headers or {},
+                )
+                while True:
                     try:
-                        job["title"] = (page.title() or "").strip()[:120] or None
+                        job = pending.get_nowait()
+                    except queue.Empty:
+                        break
+                    try:
+                        _playwright_shot(context, job, timeout, full_page, verbose,
+                                         cookies)
                     except Exception:
-                        pass
-                if verbose:
-                    print(f"      {C_GREEN}✓{C_RST} {job['url']}")
-            except Exception as e:
-                job["status"] = "failed"
-                job["error"] = str(e)[:160]
-                if verbose:
-                    print(f"      {C_RED}✗{C_RST} {job['url']} — {job['error'][:70]}")
+                        pending.put(job)  # browser died: leave it to another worker
+                        raise
             finally:
                 try:
-                    page.close()
+                    browser.close()
                 except Exception:
                     pass
-            done.append(job)
-        browser.close()
-    return done
+    except Exception as e:
+        failures.append(e)
+
+
+def _capture_playwright(jobs, width, height, timeout, full_page, verbose,
+                        headers=None, cookies=None, workers=1):
+    from playwright.sync_api import sync_playwright
+
+    pending = queue.Queue()
+    for job in jobs:
+        pending.put(job)
+    failures = []
+    count = max(1, min(int(workers or 1), len(jobs)))
+    args = (sync_playwright, pending, failures, width, height, timeout,
+            full_page, verbose, headers, cookies)
+
+    if count == 1:
+        _playwright_worker(*args)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=count) as ex:
+            for future in [ex.submit(_playwright_worker, *args) for _ in range(count)]:
+                future.result()
+
+    if failures and (len(failures) >= count or not pending.empty()):
+        raise failures[0]
+    return list(jobs)
+
+
+def _headless_flag_rejected(stderr):
+    if not stderr:
+        return False
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode("utf-8", "replace")
+    return bool(_HEADLESS_FLAG_ERROR.search(stderr))
 
 
 def _chrome_once(chrome, job, width, height, timeout):
@@ -339,8 +409,9 @@ def _chrome_once(chrome, job, width, height, timeout):
         job["url"],
     ]
     try:
-        subprocess.run(cmd, capture_output=True, timeout=timeout + 20)
-        if not job["path"].exists() or job["path"].stat().st_size == 0:
+        proc = subprocess.run(cmd, capture_output=True, timeout=timeout + 20)
+        if ((not job["path"].exists() or job["path"].stat().st_size == 0)
+                and _headless_flag_rejected(getattr(proc, "stderr", None))):
             # Older Chrome builds do not understand --headless=new
             cmd[1] = "--headless"
             subprocess.run(cmd, capture_output=True, timeout=timeout + 20)
@@ -749,14 +820,19 @@ def _write_gallery(outdir, entries, backend, source):
 # ============================================================
 
 def run_screenshots(targets, outdir="outputs/screenshots", width=1280, height=800,
-                    timeout=25, full_page=False, backend=None, workers=3,
-                    verbose=True, source=None, headers=None, cookies=None):
+                    timeout=25, full_page=False, backend=None, workers=None,
+                    verbose=True, source=None, headers=None, cookies=None,
+                    probe_threads=PROBE_THREADS):
     """Probe hosts, screenshot the live ones and build an HTML gallery.
 
     headers: {'Name': 'value'} or ['Name: value', ...]
     cookies: 'a=1; b=2' or [{'name': 'a', 'value': '1'}, ...]
     Cookies are set per target origin, so the same values work across hosts.
+    workers: parallel browser captures (None: DEFAULT_WORKERS).
+    probe_threads: parallel live probes of bare hostnames (one per host).
     """
+    if workers is None:
+        workers = DEFAULT_WORKERS
     headers = _normalize_headers(headers)
     cookies = _normalize_cookies(cookies)
     auth = _auth_summary(headers, cookies)
@@ -779,7 +855,7 @@ def run_screenshots(targets, outdir="outputs/screenshots", width=1280, height=80
     if verbose:
         print(f"  {C_GRAY}[*] Resolving live hosts...{C_RST}")
 
-    jobs, skipped = _prepare_jobs(targets, timeout, verbose)
+    jobs, skipped = _prepare_jobs(targets, timeout, verbose, threads=probe_threads)
     for entry in jobs:
         entry["status"] = "pending"
         entry["screenshot"] = None
@@ -814,7 +890,7 @@ def run_screenshots(targets, outdir="outputs/screenshots", width=1280, height=80
     if chosen == "playwright":
         try:
             captured = _capture_playwright(jobs, width, height, timeout, full_page,
-                                           verbose, headers, cookies)
+                                           verbose, headers, cookies, workers=workers)
         except Exception as e:
             fallback = find_chrome()
             if not fallback:
@@ -904,25 +980,41 @@ def save_screenshot_report(result, outdir="outputs"):
 # CLI
 # ============================================================
 
+def _drop_dead(entries):
+    """Drop rows a live probe already marked dead instead of probing them again."""
+    return [e for e in entries if not (isinstance(e, dict) and e.get("alive") is False)]
+
+
+def _live_from_subdomains(subs):
+    """Alive rows of the live probe embedded in a subdomain result, if any."""
+    live = subs.get("live")
+    results = live.get("results") if isinstance(live, dict) else None
+    if not isinstance(results, list):
+        return []
+    return [r for r in results if isinstance(r, dict) and r.get("alive")]
+
+
 def _targets_from_json(path):
     with open(path, encoding="utf-8", errors="ignore") as fh:
         data = json.load(fh)
 
     if isinstance(data, list):
-        return live_probe._dedupe(data)
+        return live_probe._dedupe(_drop_dead(data))
 
     for key in ("subdomains", "results", "hosts"):
         value = data.get(key) if isinstance(data, dict) else None
         if isinstance(value, list):
-            return live_probe._dedupe(value)
+            return live_probe._dedupe(_drop_dead(value))
         # cli.py saves subdomain_enum output as {"subdomains": {"subdomains": [...]}}
         if isinstance(value, dict) and isinstance(value.get("subdomains"), list):
-            return live_probe._dedupe(value["subdomains"])
+            return live_probe._dedupe(
+                _live_from_subdomains(value) or value["subdomains"])
 
     if isinstance(data, dict) and isinstance(data.get("steps"), dict):
         subs = data["steps"].get("subdomains", {})
         if isinstance(subs, dict) and subs.get("subdomains"):
-            return live_probe._dedupe(subs["subdomains"])
+            return live_probe._dedupe(
+                _live_from_subdomains(subs) or subs["subdomains"])
 
     raise ValueError(f"no host list found in {path}")
 
@@ -939,8 +1031,8 @@ def main():
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=800)
     parser.add_argument("--timeout", type=int, default=25)
-    parser.add_argument("--workers", type=int, default=3,
-                        help="Parallel headless-Chrome jobs")
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+                        help="Parallel browser captures (default: %(default)s)")
     parser.add_argument("--full-page", action="store_true")
     parser.add_argument("--backend", choices=["playwright", "chrome"])
     parser.add_argument("--header", action="append", metavar="'Name: value'",

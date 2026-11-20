@@ -136,10 +136,15 @@ def run_scanner(scanner_key, target, timeout=300, verbose=False):
         }
 
 
-def run_all(target, scanners=None, workers=3, timeout=300, verbose=True):
+def run_all(target, scanners=None, workers=None, timeout=300, verbose=True):
     """Run multiple scanners in parallel."""
     if scanners is None:
         scanners = ["ssrf", "ssti", "cmdi", "xss", "jwt", "sqli"]
+
+    # Default to one worker per scanner (capped at 6) so the default set runs in
+    # a single wave instead of serialized into two. Still kwarg-configurable.
+    if workers is None:
+        workers = min(len(scanners), 6) if scanners else 1
 
     result = {
         "timestamp": datetime.now().isoformat(),

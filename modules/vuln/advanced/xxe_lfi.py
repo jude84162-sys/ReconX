@@ -19,7 +19,10 @@ from modules.utils.http_client import (
     adaptive_request, is_blocked, join_url, normalize_url, query_params,
     random_token, request, with_params,
 )
-from modules.vuln.advanced.base import add_finding, finalize, finding, new_result, print_report
+from modules.vuln.advanced.base import (
+    DEFAULT_WORKERS, add_finding, finalize, finding, new_result, parallel_map,
+    print_report,
+)
 
 LFI_PARAMS = [
     "file", "page", "path", "include", "template", "view", "doc", "document",
@@ -91,7 +94,7 @@ def _lfi_marker(body):
     return None
 
 
-def test_lfi(target, timeout=10, verbose=False, result=None):
+def test_lfi(target, timeout=10, verbose=False, result=None, workers=DEFAULT_WORKERS):
     params = query_params(target)
     if not params:
         params = LFI_PARAMS[:6]
@@ -99,9 +102,12 @@ def test_lfi(target, timeout=10, verbose=False, result=None):
 
     # Baseline with a benign value so we never flag content already on the page.
     baseline = request(with_params(target, {params[0]: random_token()}), timeout=timeout)
-    baseline_body = baseline.body or ""
+    baseline_low = (baseline.body or "").lower()
 
-    for param in params[:10]:
+    def probe_param(param):
+        # Payloads for one parameter stay serial: adaptive_request only escalates
+        # to WAF-evasion mutations when the plain request is blocked, and one
+        # confirmed payload per parameter is enough.
         for label, payload in LFI_PAYLOADS:
             send = lambda value, p=param: request(
                 with_params(target, {p: value}), timeout=timeout)
@@ -111,10 +117,11 @@ def test_lfi(target, timeout=10, verbose=False, result=None):
             marker = _lfi_marker(resp.body)
             if not marker:
                 continue
-            if marker in baseline_body.lower():
+            if marker in baseline_low:
                 continue
-
-            add_finding(result, finding(
+            if verbose:
+                print(f"    [!] LFI via '{param}' -> {marker}")
+            return finding(
                 f"lfi_{param}_{label}",
                 f"Local file inclusion via '{param}' ({label})",
                 "critical",
@@ -131,13 +138,15 @@ def test_lfi(target, timeout=10, verbose=False, result=None):
                 parameter=param,
                 payload=payload,
                 source="xxe_lfi",
-            ))
-            if verbose:
-                print(f"    [!] LFI via '{param}' -> {marker}")
-            break  # one confirmed payload per parameter is enough
+            )
+        return None
+
+    for item in parallel_map(params[:10], probe_param, workers=workers):
+        if item:
+            add_finding(result, item)
 
 
-def test_xxe(target, timeout=10, verbose=False, result=None):
+def test_xxe(target, timeout=10, verbose=False, result=None, workers=DEFAULT_WORKERS):
     endpoints = [target]
     for path in ("/api/xml", "/xmlrpc.php", "/soap", "/ws"):
         candidate = join_url(target, path)
@@ -146,11 +155,12 @@ def test_xxe(target, timeout=10, verbose=False, result=None):
 
     # Establish a baseline with a plain XML body on the same endpoint.
     plain = '<?xml version="1.0"?><reconx>test</reconx>'
-    for endpoint in endpoints[:4]:
+
+    def probe_endpoint(endpoint):
         baseline = request(endpoint, method="POST", data=plain, timeout=timeout,
                            headers={"Content-Type": "application/xml"})
         if baseline.error:
-            continue
+            return None
         for label, content_type, payload in XXE_PAYLOADS:
             resp = request(endpoint, method="POST", data=payload, timeout=timeout,
                            headers={"Content-Type": content_type})
@@ -159,7 +169,9 @@ def test_xxe(target, timeout=10, verbose=False, result=None):
 
             low = (resp.body or "").lower()
             if "root:x:0:0" in low or "[fonts]" in low:
-                add_finding(result, finding(
+                if verbose:
+                    print(f"    [!] XXE confirmed on {endpoint} ({label})")
+                return ("critical", finding(
                     f"xxe_{label}",
                     f"XML external entity injection ({label})",
                     "critical",
@@ -174,13 +186,12 @@ def test_xxe(target, timeout=10, verbose=False, result=None):
                     bug_class="xxe",
                     source="xxe_lfi",
                 ))
-                if verbose:
-                    print(f"    [!] XXE confirmed on {endpoint} ({label})")
-                return
 
             leaked = [m for m in XML_ERROR_MARKERS if m in low]
             if leaked and not is_blocked(resp):
-                add_finding(result, finding(
+                if verbose:
+                    print(f"    [?] Possible blind XXE on {endpoint} ({label})")
+                return ("medium", finding(
                     f"xxe_parser_{label}",
                     "XML parser processes external entities (error-based)",
                     "medium",
@@ -194,23 +205,31 @@ def test_xxe(target, timeout=10, verbose=False, result=None):
                     bug_class="xxe",
                     source="xxe_lfi",
                 ))
-                if verbose:
-                    print(f"    [?] Possible blind XXE on {endpoint} ({label})")
-                break
+        return None
+
+    # Replay in endpoint order: stop at the first confirmed (critical) XXE, exactly
+    # like the serial loop's early return.
+    for outcome in parallel_map(endpoints[:4], probe_endpoint, workers=workers):
+        if not outcome:
+            continue
+        severity, item = outcome
+        add_finding(result, item)
+        if severity == "critical":
+            break
 
 
-def scan(target, timeout=10, verbose=False):
+def scan(target, timeout=10, verbose=False, workers=DEFAULT_WORKERS):
     target = normalize_url(target)
     result = new_result(target)
     result["checks_run"].extend(["xxe", "lfi"])
 
     try:
-        test_xxe(target, timeout=timeout, verbose=verbose, result=result)
+        test_xxe(target, timeout=timeout, verbose=verbose, result=result, workers=workers)
     except Exception as e:
         result["errors"].append(f"xxe: {e}")
 
     try:
-        test_lfi(target, timeout=timeout, verbose=verbose, result=result)
+        test_lfi(target, timeout=timeout, verbose=verbose, result=result, workers=workers)
     except Exception as e:
         result["errors"].append(f"lfi: {e}")
 

@@ -7,22 +7,32 @@ Provides three things the advanced scanners build on:
   * ``compare_responses()`` - semantic/differential response analysis
   * ``adaptive_request()``  - payload mutation when a WAF blocks the plain request
 
-Zero external dependencies (urllib only), TLS verification disabled on purpose:
+Zero external dependencies (stdlib only), TLS verification disabled on purpose:
 these scanners run against targets that frequently use self-signed certificates.
+
+Connections are kept alive and reused per worker thread. Set the environment
+variable ``RECONX_NO_KEEPALIVE=1`` to open a new connection for every request.
 """
 
 import base64
+import collections
 import difflib
 import hashlib
+import http.client
 import json
+import os
 import random
 import re
+import select
+import socket
 import ssl
 import string
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import weakref
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -33,7 +43,6 @@ DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_UA,
     "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "close",
 }
 
 MAX_BODY = 500_000
@@ -84,17 +93,236 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+# ============================================================
+# Keep-alive connection pool (one set of connections per thread)
+# ============================================================
+
+NO_KEEPALIVE_ENV = "RECONX_NO_KEEPALIVE"
+POOL_MAX_PER_THREAD = 16
+
+# Errors that mean a reused keep-alive socket had already been closed by the
+# server; the request is sent once more on a fresh connection.
+_STALE_ERRORS = (http.client.BadStatusLine, BrokenPipeError, ConnectionResetError,
+                 ConnectionAbortedError, ssl.SSLEOFError, ssl.SSLZeroReturnError)
+
+
+def keepalive_enabled():
+    """False when ``RECONX_NO_KEEPALIVE`` is set to a true value."""
+    value = os.environ.get(NO_KEEPALIVE_ENV, "").strip().lower()
+    return value not in ("1", "true", "yes", "on")
+
+
+def _close_all(conns):
+    while conns:
+        _, conn = conns.popitem()
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+class _ThreadConnections:
+    """Per-thread pool; its connections are closed when the thread exits."""
+
+    def __init__(self):
+        self.conns = collections.OrderedDict()
+        weakref.finalize(self, _close_all, self.conns)
+
+
+_LOCAL = threading.local()
+
+
+def _thread_connections():
+    holder = getattr(_LOCAL, "holder", None)
+    if holder is None:
+        holder = _LOCAL.holder = _ThreadConnections()
+    return holder.conns
+
+
+def close_connections():
+    """Close every keep-alive connection held by the calling thread."""
+    _close_all(_thread_connections())
+
+
+class _PooledResponse(http.client.HTTPResponse):
+    """HTTPResponse that knows whether its body was read to the end.
+
+    A keep-alive connection is only reused after the previous response on it
+    was fully consumed; closing it early leaves unread bytes on the socket, so
+    the connection is dropped instead.
+    """
+
+    _reconx_aborted = False
+    _reconx_conn = None
+    _reconx_sock = None
+
+    def _reconx_complete(self):
+        return self.fp is None and not self._reconx_aborted
+
+    def close(self):
+        if self.fp is None:
+            super().close()
+            return
+        self._reconx_aborted = True
+        try:
+            super().close()
+        finally:
+            ref = self._reconx_conn
+            conn = ref() if ref is not None else None
+            if (conn is not None and conn.sock is not None
+                    and conn.sock is self._reconx_sock
+                    and getattr(conn, "_reconx_last", None) is self):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+
+def _sock_timeout(timeout):
+    if timeout is socket._GLOBAL_DEFAULT_TIMEOUT:
+        return socket.getdefaulttimeout()
+    return timeout
+
+
+def _sock_dropped(sock):
+    """True when an idle socket was closed by the peer (or has stray data)."""
+    try:
+        if sock.fileno() < 0:
+            return True
+        pending = getattr(sock, "pending", None)
+        if pending is not None and pending():
+            return True
+        if hasattr(select, "poll"):
+            poller = select.poll()
+            poller.register(sock, select.POLLIN | select.POLLPRI)
+            return bool(poller.poll(0))
+        readable, _, _ = select.select([sock], [], [], 0)
+        return bool(readable)
+    except (OSError, ValueError):
+        return True
+
+
+def _is_stale(exc):
+    if isinstance(exc, urllib.error.URLError) and isinstance(exc.reason, BaseException):
+        exc = exc.reason
+    return isinstance(exc, _STALE_ERRORS)
+
+
+def _checkout(key, http_class, host, timeout, conn_args, debuglevel):
+    """Return ``(connection, reused)`` for this thread."""
+    conns = _thread_connections()
+    conn = conns.get(key)
+    reused = False
+    if conn is None:
+        conn = http_class(host, timeout=timeout, **conn_args)
+        conn.response_class = _PooledResponse
+        conns[key] = conn
+        while len(conns) > POOL_MAX_PER_THREAD:
+            _, old = conns.popitem(last=False)
+            try:
+                old.close()
+            except Exception:
+                pass
+    else:
+        conns.move_to_end(key)
+        conn.timeout = timeout
+        if conn.sock is not None:
+            last = getattr(conn, "_reconx_last", None)
+            if (last is not None and last._reconx_complete()
+                    and not _sock_dropped(conn.sock)):
+                try:
+                    conn.sock.settimeout(_sock_timeout(timeout))
+                    reused = True
+                except OSError:
+                    conn.close()
+            else:
+                conn.close()
+    conn.set_debuglevel(debuglevel)
+    return conn, reused
+
+
+class _KeepAliveMixin:
+    """urllib handler that sends requests over pooled keep-alive connections.
+
+    Proxied requests (env HTTP(S)_PROXY) take urllib's normal one-shot path.
+    """
+
+    def do_open(self, http_class, req, **http_conn_args):
+        if req._tunnel_host or req.has_proxy():
+            return super().do_open(http_class, req, **http_conn_args)
+        host = req.host
+        if not host:
+            raise urllib.error.URLError("no host given")
+
+        headers = dict(req.unredirected_hdrs)
+        headers.update({k: v for k, v in req.headers.items() if k not in headers})
+        headers = {name.title(): val for name, val in headers.items()}
+
+        key = (http_class, host, id(http_conn_args.get("context")))
+        replayable = req.data is None or isinstance(req.data, (bytes, bytearray))
+        debuglevel = getattr(self, "_debuglevel", 0)
+        retried = False
+        while True:
+            conn, reused = _checkout(key, http_class, host, req.timeout,
+                                     http_conn_args, debuglevel)
+            try:
+                try:
+                    conn.request(req.get_method(), req.selector, req.data, headers,
+                                 encode_chunked=req.has_header("Transfer-encoding"))
+                except OSError as err:
+                    raise urllib.error.URLError(err)
+                r = conn.getresponse()
+            except BaseException as exc:
+                conn.close()
+                if reused and replayable and not retried and _is_stale(exc):
+                    retried = True
+                    continue
+                raise
+            break
+
+        r._reconx_conn = weakref.ref(conn)
+        r._reconx_sock = conn.sock
+        conn._reconx_last = r
+        r.url = req.get_full_url()
+        r.msg = r.reason
+        return r
+
+
+class _KeepAliveHTTPHandler(_KeepAliveMixin, urllib.request.HTTPHandler):
+    pass
+
+
+class _KeepAliveHTTPSHandler(_KeepAliveMixin, urllib.request.HTTPSHandler):
+    pass
+
+
 _OPENERS = {}
 
 
-def _opener(allow_redirects):
-    key = bool(allow_redirects)
+def _opener(allow_redirects, keepalive=None):
+    if keepalive is None:
+        keepalive = keepalive_enabled()
+    key = (bool(allow_redirects), bool(keepalive))
     if key not in _OPENERS:
-        handlers = [urllib.request.HTTPSHandler(context=_ssl_context())]
-        if not key:
+        if keepalive:
+            handlers = [_KeepAliveHTTPHandler(),
+                        _KeepAliveHTTPSHandler(context=_ssl_context())]
+        else:
+            handlers = [urllib.request.HTTPSHandler(context=_ssl_context())]
+        if not allow_redirects:
             handlers.insert(0, _NoRedirect())
         _OPENERS[key] = urllib.request.build_opener(*handlers)
     return _OPENERS[key]
+
+
+def open_request(req, timeout=10, allow_redirects=True):
+    """Open a ``urllib.request.Request`` through the shared keep-alive opener.
+
+    Behaves like ``urllib.request.urlopen`` with TLS verification disabled:
+    redirects are followed (unless ``allow_redirects`` is False), environment
+    proxies are honoured and 4xx/5xx raise ``urllib.error.HTTPError``.
+    """
+    return _opener(allow_redirects).open(req, timeout=timeout)
 
 
 def request(url, method="GET", headers=None, data=None, timeout=10,
@@ -135,6 +363,10 @@ def request(url, method="GET", headers=None, data=None, timeout=10,
             raw = e.read(MAX_BODY)
         except Exception:
             raw = b""
+        try:
+            e.close()
+        except Exception:
+            pass
         return Response(
             url=url,
             status=e.code,

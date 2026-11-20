@@ -2,8 +2,11 @@
 """ReconX - DNS Deep Recon (Pure Python, DoH-based, no nslookup needed)."""
 
 import json
+import random
 import socket
 import ssl
+import struct
+import time
 import logging
 import urllib.request
 import urllib.error
@@ -11,6 +14,11 @@ import concurrent.futures
 from datetime import datetime
 
 logger = logging.getLogger("ReconX.dns_deep")
+
+AXFR_TIMEOUT = 4.0
+AXFR_MAX_BYTES = 1024 * 1024
+AXFR_MAX_SECONDS = 20.0
+AXFR_MAX_NAMES = 50
 
 
 # ============================================================
@@ -75,7 +83,6 @@ def _socket_resolve(domain):
     """Resolve A/AAAA via socket (no external tools)."""
     result = {"A": [], "AAAA": []}
     try:
-        socket.setdefaulttimeout(5)
         infos = socket.getaddrinfo(domain, None)
         for info in infos:
             family, _, _, _, sockaddr = info
@@ -151,68 +158,183 @@ def _check_spf(txt_records):
 # Zone transfer attempt (via socket, best-effort)
 # ============================================================
 
-def _try_zone_transfer(domain, ns):
-    """Best-effort AXFR via socket. Most servers refuse."""
+def _resolve_ipv4(host, port=53):
+    """First IPv4 address of host, without touching global socket state."""
     try:
-        # Resolve NS to IP
-        ns_ips = _socket_resolve(ns).get("A", [])
-        if not ns_ips:
+        infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    except Exception:
+        return None
+    for info in infos:
+        return info[4][0]
+    return None
+
+
+def _encode_qname(domain):
+    qname = b""
+    for label in domain.strip().rstrip(".").split("."):
+        if not label:
+            continue
+        raw = label.encode("idna")
+        if len(raw) > 63:
+            raise ValueError("label too long")
+        qname += bytes([len(raw)]) + raw
+    return qname + b"\x00"
+
+
+def _recv_exact(sock, n, deadline, timeout):
+    """Read exactly n bytes, or return None if the peer closes first."""
+    buf = bytearray()
+    while len(buf) < n:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise socket.timeout("AXFR time budget exhausted")
+        sock.settimeout(min(timeout, remaining))
+        chunk = sock.recv(min(n - len(buf), 65536))
+        if not chunk:
             return None
+        buf.extend(chunk)
+    return bytes(buf)
 
-        ns_ip = ns_ips[0]
 
-        # Send AXFR query packet
-        # Build DNS AXFR query manually
-        import struct
-        import random
+def _read_tcp_message(sock, deadline, timeout):
+    """Read one length-prefixed DNS message (RFC 1035 4.2.2)."""
+    head = _recv_exact(sock, 2, deadline, timeout)
+    if head is None:
+        return None
+    (length,) = struct.unpack("!H", head)
+    if length == 0:
+        return b""
+    return _recv_exact(sock, length, deadline, timeout)
+
+
+def _parse_name(msg, off):
+    """Decode a (possibly compressed) name; return (name, offset after it)."""
+    labels = []
+    end = None
+    hops = 0
+    while True:
+        if off >= len(msg):
+            raise ValueError("truncated name")
+        length = msg[off]
+        if length & 0xC0 == 0xC0:
+            if off + 1 >= len(msg):
+                raise ValueError("truncated pointer")
+            if end is None:
+                end = off + 2
+            hops += 1
+            if hops > 64:
+                raise ValueError("compression loop")
+            off = ((length & 0x3F) << 8) | msg[off + 1]
+            continue
+        if length & 0xC0:
+            raise ValueError("unsupported label type")
+        if length == 0:
+            off += 1
+            break
+        if off + 1 + length > len(msg):
+            raise ValueError("truncated label")
+        labels.append(msg[off + 1:off + 1 + length].decode("ascii", "replace"))
+        off += 1 + length
+    return ".".join(labels), (end if end is not None else off)
+
+
+def _parse_axfr_message(msg, txn_id):
+    """Return (rcode, [(owner, rtype), ...]) for one AXFR response message.
+
+    rcode is None when the message is not a reply to our query.
+    """
+    if not msg or len(msg) < 12:
+        return None, []
+    rid, flags, qdcount, ancount, _ns, _ar = struct.unpack("!HHHHHH", msg[:12])
+    if rid != txn_id or not flags & 0x8000:
+        return None, []
+    rcode = flags & 0x000F
+    if rcode != 0:
+        return rcode, []
+    records = []
+    off = 12
+    try:
+        for _ in range(qdcount):
+            _, off = _parse_name(msg, off)
+            off += 4
+        for _ in range(ancount):
+            owner, off = _parse_name(msg, off)
+            if off + 10 > len(msg):
+                break
+            rtype, _cls, _ttl, rdlength = struct.unpack("!HHIH", msg[off:off + 10])
+            off += 10 + rdlength
+            if off > len(msg):
+                break
+            records.append((owner, rtype))
+    except ValueError:
+        pass
+    return rcode, records
+
+
+def _try_zone_transfer(domain, ns, timeout=AXFR_TIMEOUT, port=53,
+                       max_bytes=AXFR_MAX_BYTES, max_seconds=AXFR_MAX_SECONDS):
+    """Best-effort AXFR over DNS-over-TCP. Most servers refuse."""
+    sock = None
+    total = 0
+    record_count = 0
+    soa_seen = 0
+    names = []
+    seen = set()
+    try:
+        ns_ip = _resolve_ipv4(ns, port)
+        if not ns_ip:
+            return None
 
         txn_id = random.randint(1, 65535)
-        flags = 0x0000  # Standard query
-        qdcount = 1
-        header = struct.pack("!HHHHHH", txn_id, flags, qdcount, 0, 0, 0)
-
-        # Encode domain name
-        parts = domain.split(".")
-        qname = b""
-        for p in parts:
-            qname += bytes([len(p)]) + p.encode()
-        qname += b"\x00"
-
+        header = struct.pack("!HHHHHH", txn_id, 0x0000, 1, 0, 0, 0)
         # QTYPE=252 (AXFR), QCLASS=1 (IN)
-        question = qname + struct.pack("!HH", 252, 1)
-        packet = header + question
+        query = header + _encode_qname(domain) + struct.pack("!HH", 252, 1)
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(8)
-        sock.connect((ns_ip, 53))
-        sock.send(packet)
+        deadline = time.monotonic() + max(timeout, max_seconds)
+        sock = socket.create_connection((ns_ip, port), timeout=timeout)
+        sock.sendall(struct.pack("!H", len(query)) + query)
 
-        # Read response
-        response = sock.recv(4096)
-        sock.close()
+        while total < max_bytes:
+            reply = _read_tcp_message(sock, deadline, timeout)
+            if reply is None:
+                break
+            rcode, records = _parse_axfr_message(reply, txn_id)
+            if rcode != 0 or not records:
+                break
+            total += len(reply) + 2
+            record_count += len(records)
+            for owner, rtype in records:
+                if rtype == 6:
+                    soa_seen += 1
+                if owner and owner not in seen and len(names) < AXFR_MAX_NAMES:
+                    seen.add(owner)
+                    names.append(owner)
+            if soa_seen >= 2:
+                break
+    except Exception as e:
+        logger.debug(f"AXFR via {ns} failed: {e}")
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
 
-        if len(response) < 12:
-            return None
-
-        # Parse response code
-        resp_id, resp_flags = struct.unpack("!HH", response[:4])
-        rcode = resp_flags & 0x000F
-
-        if rcode == 5:  # REFUSED
-            return None
-        if rcode == 0 and len(response) > 12:
-            # Got some data
-            return f"Received {len(response)} bytes from {ns}"
-    except Exception:
-        pass
-    return None
+    if not record_count:
+        return None
+    content = f"Received {total} bytes ({record_count} records) from {ns}"
+    if soa_seen < 2:
+        content += " [partial]"
+    if names:
+        content += ": " + ", ".join(names)
+    return content
 
 
 # ============================================================
 # Main
 # ============================================================
 
-def run_dns_deep(domain):
+def run_dns_deep(domain, axfr_timeout=AXFR_TIMEOUT, axfr_workers=2):
     """Deep DNS recon — pure Python, no external tools."""
     result = {
         "timestamp": datetime.now().isoformat(),
@@ -268,9 +390,25 @@ def run_dns_deep(domain):
     result["spf"] = _check_spf(result["txt"])
 
     # === Zone transfer attempt ===
-    for ns in result["nameservers"][:2]:
-        print(f"  [*] Attempting AXFR via {ns}...")
-        zt = _try_zone_transfer(domain, ns)
+    candidates = result["nameservers"][:2]
+    outcomes = []
+    if candidates:
+        for ns in candidates:
+            print(f"  [*] Attempting AXFR via {ns}...")
+        pool_size = max(1, min(int(axfr_workers or 1), len(candidates)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=pool_size) as ex:
+            futures = [
+                ex.submit(_try_zone_transfer, domain, ns, timeout=axfr_timeout)
+                for ns in candidates
+            ]
+            for ns, future in zip(candidates, futures):
+                try:
+                    outcomes.append((ns, future.result()))
+                except Exception as e:
+                    logger.debug(f"AXFR via {ns} failed: {e}")
+                    outcomes.append((ns, None))
+
+    for ns, zt in outcomes:
         if zt:
             result["zone_transfer"] = {
                 "nameserver": ns,

@@ -1,8 +1,15 @@
 # modules/vuln/advanced/base.py
 """ReconX - Shared helpers for the advanced scanner package."""
 
+import concurrent.futures
 import json
 from datetime import datetime
+
+# Conservative default for per-target request concurrency. Keep it small: these
+# scanners fire active payloads at a single host, so a modest pool amortises the
+# per-request handshake latency without turning a scan into a burst a WAF/IDS
+# would ban.
+DEFAULT_WORKERS = 5
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 SEVERITY_ICONS = {
@@ -17,6 +24,32 @@ PAYOUTS = {
     "low": "$50-$500",
     "info": "n/a",
 }
+
+
+def parallel_map(items, fn, workers=DEFAULT_WORKERS):
+    """Run ``fn(item)`` over ``items`` on a bounded pool, keeping input order.
+
+    Returns a list aligned 1:1 with ``items`` (``results[i]`` is ``fn(items[i])``).
+    Order-preserving so callers can replay results deterministically (pick the
+    first finding in iteration order, keep "first N" semantics, etc.) even though
+    the work ran concurrently. An item whose ``fn`` raises yields ``None`` in its
+    slot, matching the "skip this probe and continue" behaviour of the serial
+    loops these scanners used before.
+    """
+    items = list(items)
+    if not items:
+        return []
+    count = max(1, min(int(workers or 1), len(items)))
+    results = [None] * len(items)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=count) as ex:
+        future_index = {ex.submit(fn, item): i for i, item in enumerate(items)}
+        for future in concurrent.futures.as_completed(future_index):
+            idx = future_index[future]
+            try:
+                results[idx] = future.result()
+            except Exception:
+                results[idx] = None
+    return results
 
 
 def new_result(target, **extra):

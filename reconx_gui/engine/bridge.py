@@ -185,8 +185,9 @@ def run(tool_id: str, params: dict, log, cancel) -> dict:
                                timeout=300, verbose=True))
     if tool_id == "all_vuln":
         m = _imp("modules.vuln.scanner_manager")
-        return _normalize(call(m.run_all, params["url"],
-                               workers=int(params.get("workers", 3) or 3), verbose=True))
+        raw = params.get("workers")
+        workers = int(raw) if raw is not None and str(raw).strip() else None
+        return _normalize(call(m.run_all, params["url"], workers=workers, verbose=True))
     # -- Bounty --
     if tool_id == "dirb":
         m = _imp("modules.vuln.dirb_engine")
@@ -241,10 +242,10 @@ def run(tool_id: str, params: dict, log, cancel) -> dict:
     if tool_id == "live_probe":
         m = _imp("modules.web.live_probe")
         targets = [h.strip() for h in __import__("re").split(r"[\s,]+", params.get("hosts", "")) if h.strip()]
-        return _normalize(call(m.probe_hosts, targets, threads=20, timeout=6, verbose=True))
+        return _normalize(call(m.probe_hosts, targets, timeout=6, verbose=True))
     if tool_id == "screenshot":
         m = _imp("modules.web.aquatone_clone")
         targets = [h.strip() for h in __import__("re").split(r"[\s,]+", params.get("hosts", "")) if h.strip()]
         return _normalize(call(m.run_screenshots, targets, outdir="outputs/screenshots",
-                               workers=3, verbose=True, source="gui"))
+                               verbose=True, source="gui"))
     raise ImportError(f"no bridge for {tool_id}")

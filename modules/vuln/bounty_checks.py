@@ -458,14 +458,31 @@ def run_bounty_checks(url, workers=10, timeout=8):
         ("jwt_issues",            check_jwt_issues),
     ]
 
-    for name, fn in checks:
-        print(f"  [*] {name}...")
-        try:
-            findings = fn(url, timeout=timeout)
-            result["findings"].extend(findings)
+    # The six checks are independent same-host work, so run them on one shared,
+    # bounded pool instead of back-to-back. Inner loops stay serial to keep the
+    # instantaneous request rate to a single host polite.
+    check_workers = max(1, min(workers, len(checks)))
+    outcomes = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=check_workers) as ex:
+        future_name = {}
+        for name, fn in checks:
+            print(f"  [*] {name}...")
+            future_name[ex.submit(fn, url, timeout=timeout)] = name
+        for future in concurrent.futures.as_completed(future_name):
+            name = future_name[future]
+            try:
+                outcomes[name] = ("ok", future.result())
+            except Exception as e:
+                outcomes[name] = ("err", str(e))
+
+    # Aggregate in the declared check order so reports stay deterministic.
+    for name, _ in checks:
+        status, payload = outcomes.get(name, ("err", "no result"))
+        if status == "ok":
+            result["findings"].extend(payload)
             result["checks_run"].append(name)
-        except Exception as e:
-            result["errors"].append(f"{name}: {e}")
+        else:
+            result["errors"].append(f"{name}: {payload}")
 
     # Sort by payout potential (highest first)
     def payout_sort_key(f):

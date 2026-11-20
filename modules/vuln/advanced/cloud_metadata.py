@@ -10,13 +10,17 @@ against a closed-port control.
 Write/echo endpoints are never used; all requests are GETs.
 """
 
+import threading
 import time
 
 from modules.utils.http_client import (
     adaptive_request, is_blocked, normalize_url, query_params, random_token,
     request, with_params,
 )
-from modules.vuln.advanced.base import add_finding, finalize, finding, new_result, print_report
+from modules.vuln.advanced.base import (
+    DEFAULT_WORKERS, add_finding, finalize, finding, new_result, parallel_map,
+    print_report,
+)
 
 SSRF_PARAMS = [
     "url", "uri", "link", "src", "source", "target", "dest", "destination",
@@ -77,50 +81,74 @@ def _param_candidates(target):
     return params[:10]
 
 
-def _probe_cloud(target, params, timeout, verbose, result, counter):
+def _probe_cloud(target, params, timeout, verbose, result, counter, workers=DEFAULT_WORKERS):
+    # Build every (param, metadata-target) probe in deterministic iteration order
+    # so the concurrent results can be replayed exactly like the old serial loop.
+    work = []
     for param in params:
         for target_id, url, markers, headers, label in CLOUD_TARGETS:
             for with_headers in ([True, False] if headers else [False]):
-                if counter[0] >= MAX_REQUESTS:
-                    result["errors"].append("request budget exhausted during metadata probing")
-                    return
-                counter[0] += 1
-                hdrs = dict(headers) if with_headers else {}
-                injected = with_params(target, {param: url})
-                send = lambda value, p=param: request(
-                    with_params(target, {p: value}), timeout=timeout, headers=hdrs)
-                used, resp, mutation = adaptive_request(send, url, limit=2)
-                if resp is None or resp.error:
-                    continue
+                work.append((param, target_id, url, markers, headers, label, with_headers))
 
-                found = _marker(resp.body, markers)
-                if not found:
-                    continue
+    lock = threading.Lock()
+    state = {"stop": False, "exhausted": False}
 
-                add_finding(result, finding(
-                    f"ssrf_{target_id}",
-                    f"SSRF reaches {label}",
-                    "critical",
-                    injected,
-                    f"Response contains '{found}' ({len(resp.body)} bytes)"
-                    + (f"; WAF evasion: {mutation}" if mutation not in ("plain", "blocked") else ""),
-                    description=(f"The server-side fetcher followed the injected URL to {label}. "
-                                 "Cloud credentials in metadata frequently allow full account "
-                                 "takeover; user-data often contains secrets and bootstrap tokens."),
-                    remediation=("Block link-local 169.254.0.0/16 and cloud metadata hostnames in "
-                                 "the fetcher, require auth for metadata (IMDSv2), and use an "
-                                 "allowlist of outbound destinations."),
-                    confidence=0.95 if target_id == "aws_iam" else 0.9,
-                    bug_class="ssrf",
-                    parameter=param,
-                    payload=url,
-                    source="cloud_metadata",
-                ))
-                if verbose:
-                    print(f"    [!] {label} via '{param}' -> {found}")
+    def probe(item):
+        param, target_id, url, markers, headers, label, with_headers = item
+        with lock:
+            # One confirmed metadata hit is enough; stop claiming budget for the rest.
+            if state["stop"]:
+                return None
+            if counter[0] >= MAX_REQUESTS:
+                state["exhausted"] = True
+                return None
+            counter[0] += 1
+        hdrs = dict(headers) if with_headers else {}
+        send = lambda value, p=param, h=hdrs: request(
+            with_params(target, {p: value}), timeout=timeout, headers=h)
+        used, resp, mutation = adaptive_request(send, url, limit=2)
+        if resp is None or resp.error:
+            return None
+        found = _marker(resp.body, markers)
+        if not found:
+            return None
+        with lock:
+            state["stop"] = True
+        return {"param": param, "target_id": target_id, "url": url, "label": label,
+                "found": found, "resp_len": len(resp.body), "mutation": mutation}
 
-                # Same parameter already proven; move on.
-                return
+    hits = parallel_map(work, probe, workers=workers)
+
+    if state["exhausted"]:
+        result["errors"].append("request budget exhausted during metadata probing")
+
+    # Replay in iteration order: report the first hit the serial loop would have.
+    hit = next((h for h in hits if h), None)
+    if not hit:
+        return
+
+    mutation = hit["mutation"]
+    add_finding(result, finding(
+        f"ssrf_{hit['target_id']}",
+        f"SSRF reaches {hit['label']}",
+        "critical",
+        with_params(target, {hit["param"]: hit["url"]}),
+        f"Response contains '{hit['found']}' ({hit['resp_len']} bytes)"
+        + (f"; WAF evasion: {mutation}" if mutation not in ("plain", "blocked") else ""),
+        description=(f"The server-side fetcher followed the injected URL to {hit['label']}. "
+                     "Cloud credentials in metadata frequently allow full account "
+                     "takeover; user-data often contains secrets and bootstrap tokens."),
+        remediation=("Block link-local 169.254.0.0/16 and cloud metadata hostnames in "
+                     "the fetcher, require auth for metadata (IMDSv2), and use an "
+                     "allowlist of outbound destinations."),
+        confidence=0.95 if hit["target_id"] == "aws_iam" else 0.9,
+        bug_class="ssrf",
+        parameter=hit["param"],
+        payload=hit["url"],
+        source="cloud_metadata",
+    ))
+    if verbose:
+        print(f"    [!] {hit['label']} via '{hit['param']}' -> {hit['found']}")
 
 
 def _port_scan(target, params, timeout, verbose, result, counter):
@@ -179,7 +207,7 @@ def _port_scan(target, params, timeout, verbose, result, counter):
         ))
 
 
-def scan(target, timeout=10, verbose=False):
+def scan(target, timeout=10, verbose=False, workers=DEFAULT_WORKERS):
     target = normalize_url(target)
     result = new_result(target, internal_ports=[])
     result["checks_run"].extend(["cloud_metadata", "internal_port_scan"])
@@ -197,7 +225,7 @@ def scan(target, timeout=10, verbose=False):
 
     counter = [0]
     try:
-        _probe_cloud(target, params, timeout, verbose, result, counter)
+        _probe_cloud(target, params, timeout, verbose, result, counter, workers=workers)
     except Exception as e:
         result["errors"].append(f"metadata: {e}")
 

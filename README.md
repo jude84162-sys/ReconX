@@ -41,12 +41,14 @@
 - **SQLi, XSS, SSRF, SSTI, CMDi, JWT** — per-class scanners, plus an ALL runner
 
 ### 💰 Bounty & Content (21-23)
-- **DIRB Content Scan** — Optional DIRB integration with wordlist selection
+- **DIRB Content Scan** — Optional DIRB integration with wordlist selection (non-recursive by default)
 - **Bug Bounty Checks** — VCS, API docs, CORS, open redirect, GraphQL, JWT
 - **Bug Bounty Nikto** — Multi-target parallel, WAF-aware, payout estimation
 
 ### 🎯 Full Recon (24-25)
 - **Full Web Recon** — All recon tools in parallel + auto HTML/TXT/JSON reports
+  (the DIRB step scans the dirb `common.txt` wordlist with the threaded in-process
+  buster — 30 threads, 120 s budget — instead of running single-threaded `dirb`)
 - **Fast Web Recon** — Skip subdomains + dirbuster (faster)
 
 ### 🚀 Attack Surface (26)
@@ -233,8 +235,12 @@ python recon.py example.com --output report.json
 # More IPs in IP OSINT (default: 3)
 python recon.py example.com --max-ips 5
 
-# Screenshot every live subdomain after the scan (outputs/screenshots)
+# Screenshot every live subdomain once they are probed (outputs/screenshots)
 python recon.py example.com --screenshots
+
+# Time limits: whole run (default 600 s) and each step (default 300 s,
+# subdomains 480 s); steps still running are reported as timed out. 0 = no limit
+python recon.py example.com --budget 300 --step-timeout 120
 ```
 
 Module-Level Usage
@@ -406,13 +412,13 @@ $ python recon.py example.com
   🎯 Target: example.com
   📅 Time:   2026-09-21 14:59:13
 
+⚡ Running 13 steps in PARALLEL (300s per step, 600s overall)...
+
 ──────────────────────────────────────────────────────────────────
   [1/13] 🌐 Domain OSINT
 ──────────────────────────────────────────────────────────────────
   ✓ IPs resolved:       10
   ✓ Registrar:          RESERVED-Internet Assigned Numbers Authority
-
-⚡ Running 11 steps in PARALLEL...
 
 ...
 

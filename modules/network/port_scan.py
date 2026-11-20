@@ -1,12 +1,29 @@
 # modules/port_open_scan.py
 """ReconX - Port Scanner (99% accuracy, multi-threaded)."""
 
+import errno
 import socket
 import logging
 import concurrent.futures
 from datetime import datetime
 
 logger = logging.getLogger("ReconX.portscan")
+
+DEFAULT_WORKERS = 200
+DEFAULT_TIMEOUT = 1.5
+WIDE_SCAN_THRESHOLD = 1000
+WIDE_SCAN_WORKERS = 400
+WIDE_SCAN_TIMEOUT = 1.0
+
+# connect_ex() reports a timed-out connect as EWOULDBLOCK/EAGAIN; a refused
+# connect (RST) is a closed port, not a filtered one.
+_FILTERED_CODES = frozenset(
+    c for c in (
+        errno.EAGAIN, errno.EWOULDBLOCK, errno.ETIMEDOUT,
+        getattr(errno, "WSAEWOULDBLOCK", None),
+        getattr(errno, "WSAETIMEDOUT", None),
+    ) if c
+)
 
 
 # Service database
@@ -135,14 +152,24 @@ def get_ports(spec):
         return PORT_PRESETS["common"]
 
 
-def _grab_banner(sock, port, timeout=1.0):
+def _host_header(host):
+    h = str(host or "").strip().rstrip(".")
+    if not h or any(c in h for c in "\r\n\x00\t /"):
+        return b"target"
+    try:
+        return h.encode("idna")
+    except Exception:
+        return b"target"
+
+
+def _grab_banner(sock, port, timeout=1.0, host=None):
     """Grab service banner."""
     try:
         sock.settimeout(timeout)
 
         # Send probe for HTTP
         if port in (80, 8080, 8000, 8888, 8008, 8081):
-            sock.send(b"GET / HTTP/1.0\r\nHost: target\r\n\r\n")
+            sock.send(b"GET / HTTP/1.0\r\nHost: " + _host_header(host) + b"\r\n\r\n")
         elif port == 21:  # FTP
             pass  # Wait for banner
         elif port == 22:  # SSH
@@ -169,7 +196,7 @@ def _grab_banner(sock, port, timeout=1.0):
     return None
 
 
-def _scan_port(target, port, timeout=2.0, grab_banner=True):
+def _scan_port(target, port, timeout=2.0, grab_banner=True, host=None):
     """Scan a single port."""
     result = {
         "port": port,
@@ -189,11 +216,11 @@ def _scan_port(target, port, timeout=2.0, grab_banner=True):
             result["state"] = "open"
 
             if grab_banner:
-                banner = _grab_banner(sock, port)
+                banner = _grab_banner(sock, port, host=host)
                 if banner:
                     result["banner"] = banner
 
-        elif code in (111, 11):
+        elif code in _FILTERED_CODES:
             result["state"] = "filtered"
 
     except socket.timeout:
@@ -209,9 +236,38 @@ def _scan_port(target, port, timeout=2.0, grab_banner=True):
     return result
 
 
-def scan_port_range(target, ports, workers=200, timeout=2.0,
+def _fd_limit():
+    try:
+        import resource
+        soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except Exception:
+        return None
+    if soft is None or soft <= 0 or soft == getattr(resource, "RLIM_INFINITY", -1):
+        return None
+    return soft
+
+
+def _scan_plan(n_ports, workers=None, timeout=None):
+    """Pick (workers, timeout): explicit values win, else size-based defaults."""
+    wide = n_ports > WIDE_SCAN_THRESHOLD
+    if timeout is None:
+        timeout = WIDE_SCAN_TIMEOUT if wide else DEFAULT_TIMEOUT
+    if workers is None:
+        workers = WIDE_SCAN_WORKERS if wide else DEFAULT_WORKERS
+        limit = _fd_limit()
+        if limit:
+            workers = min(workers, max(16, limit // 2))
+    return workers, timeout
+
+
+def scan_port_range(target, ports, workers=None, timeout=None,
                     progress_callback=None, grab_banner=True):
-    """Scan multiple ports."""
+    """Scan multiple ports.
+
+    workers/timeout default to DEFAULT_WORKERS/DEFAULT_TIMEOUT, or to
+    WIDE_SCAN_WORKERS/WIDE_SCAN_TIMEOUT above WIDE_SCAN_THRESHOLD ports.
+    """
+    workers, timeout = _scan_plan(len(ports), workers, timeout)
     result = {
         "timestamp": datetime.now().isoformat(),
         "target": target,
@@ -221,6 +277,8 @@ def scan_port_range(target, ports, workers=200, timeout=2.0,
         "filtered_count": 0,
         "errors": [],
         "scan_duration": 0,
+        "workers": workers,
+        "timeout": timeout,
     }
 
     start = datetime.now()
@@ -236,7 +294,7 @@ def scan_port_range(target, ports, workers=200, timeout=2.0,
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {
-            ex.submit(_scan_port, target, port, timeout, grab_banner): port
+            ex.submit(_scan_port, ip, port, timeout, grab_banner, host=target): port
             for port in ports
         }
 

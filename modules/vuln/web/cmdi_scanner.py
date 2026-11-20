@@ -8,6 +8,7 @@ Detects OS command injection via time-based and output-based techniques.
 import ssl
 import time
 import logging
+import concurrent.futures
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -178,8 +179,103 @@ def test_cmdi(url, param, timeout=20, verbose=False):
     return findings
 
 
-def scan(target, params=None, timeout=20, verbose=False):
-    """Full command injection scan."""
+def _test_time_param(url, param, timeout=20, verbose=False):
+    """Time-based detection for one param (baseline + TIME_PAYLOADS, serial).
+
+    Returns a finding dict or None. Must stay sequential per the timing signal.
+    """
+    baseline_time = _baseline_time(url, param, timeout=timeout)
+
+    if verbose:
+        print(f"    [*] param '{param}' baseline: {baseline_time:.2f}s")
+
+    for payload, expected_delay, platform in TIME_PAYLOADS:
+        test_url = _build_url(url, param, payload)
+        status, body, elapsed = _fetch(test_url, timeout=timeout)
+
+        if status is None:
+            continue
+
+        time_diff = elapsed - baseline_time
+        if time_diff >= (expected_delay - 1.0):
+            return {
+                "id": f"cmdi_time_{param}",
+                "title": f"Command Injection (time-based) in '{param}'",
+                "parameter": param,
+                "payload": payload,
+                "platform": platform,
+                "severity": "critical",
+                "bug_class": "command_injection",
+                "payout_potential": "$2000-$10000+",
+                "confidence": 0.80,
+                "url": test_url,
+                "evidence": f"Response delayed {time_diff:.1f}s (baseline {baseline_time:.1f}s, expected +{expected_delay}s)",
+                "source": "custom_cmdi",
+            }
+    return None
+
+
+def _test_output_payload(url, param, payload, expected_out, platform, timeout=8):
+    """Output-based detection for a single (non-time) payload.
+
+    Returns a finding dict or None. Safe to run concurrently — no timing signal.
+    """
+    test_url = _build_url(url, param, payload)
+    status, body, _ = _fetch(test_url, timeout=timeout)
+
+    if status is None or not body:
+        return None
+
+    if expected_out and expected_out in body and payload not in body:
+        return {
+            "id": f"cmdi_out_{param}",
+            "title": f"Command Injection (output-based) in '{param}'",
+            "parameter": param,
+            "payload": payload,
+            "platform": platform,
+            "severity": "critical",
+            "bug_class": "command_injection",
+            "payout_potential": "$2000-$10000+",
+            "confidence": 0.92,
+            "url": test_url,
+            "evidence": f"Marker '{expected_out}' appeared in response",
+            "source": "custom_cmdi",
+        }
+
+    # Special: whoami check (returns username — need heuristic)
+    if expected_out is None and payload in (";whoami", "&whoami&"):
+        for uname in ["root", "www-data", "apache", "nginx", "nobody", "user"]:
+            if uname in body.lower() and payload not in body:
+                return {
+                    "id": f"cmdi_whoami_{param}",
+                    "title": f"Command Injection (whoami) in '{param}'",
+                    "parameter": param,
+                    "payload": payload,
+                    "platform": platform,
+                    "severity": "critical",
+                    "bug_class": "command_injection",
+                    "payout_potential": "$2000-$10000+",
+                    "confidence": 0.75,
+                    "url": test_url,
+                    "evidence": f"Username '{uname}' appeared after whoami",
+                    "source": "custom_cmdi",
+                }
+    return None
+
+
+def scan(target, params=None, timeout=20, verbose=False, workers=5,
+         out_timeout=8, time_timeout=None):
+    """Full command injection scan.
+
+    Time-based (sleep) payloads stay strictly sequential per target so the
+    elapsed-vs-baseline signal is not corrupted; they keep the generous
+    ``time_timeout`` (default = ``timeout``) for headroom. Only the
+    output-based (non-time) probes are parallelized — distinct params and their
+    OUTPUT_PAYLOADS run through a ThreadPoolExecutor (``workers`` kwarg, default
+    5) with a shorter ``out_timeout`` (default 8s, capped at ``timeout``).
+    Output: at most one finding per param (time preferred over output, as
+    before), returned in param order.
+    """
     result = {
         "timestamp": datetime.now().isoformat(),
         "target": target,
@@ -198,14 +294,55 @@ def scan(target, params=None, timeout=20, verbose=False):
         return result
 
     result["tested_params"] = len(params)
+    result["tested_payloads"] = len(params) * (len(TIME_PAYLOADS) + len(OUTPUT_PAYLOADS))
 
-    for param in params:
+    tt = timeout if time_timeout is None else time_timeout
+    ot = min(out_timeout, timeout) if out_timeout is not None else timeout
+    w = max(1, int(workers) if workers else 1)
+
+    findings_by_pi = {}  # param index -> finding
+
+    # Phase 1: time-based, strictly sequential (never concurrent sleeps).
+    for pi, param in enumerate(params):
         if verbose:
             print(f"    [*] Testing param: {param}")
+        tf = _test_time_param(target, param, timeout=tt, verbose=verbose)
+        if tf:
+            findings_by_pi[pi] = tf
 
-        findings = test_cmdi(target, param, timeout=timeout, verbose=verbose)
-        result["tested_payloads"] += len(TIME_PAYLOADS) + len(OUTPUT_PAYLOADS)
-        result["findings"].extend(findings)
+    # Phase 2: output-based, parallel over (pending param, output payload).
+    tasks = []
+    for pi, param in enumerate(params):
+        if pi in findings_by_pi:
+            continue  # time hit already reported for this param
+        for yi, (payload, expected_out, platform) in enumerate(OUTPUT_PAYLOADS):
+            tasks.append((pi, param, yi, payload, expected_out, platform))
+
+    if tasks:
+        best = {}  # param index -> (payload index, finding)
+        tw = max(1, min(w, len(tasks)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=tw) as ex:
+            futs = {
+                ex.submit(_test_output_payload, target, param, payload,
+                          expected_out, platform, ot): (pi, yi)
+                for (pi, param, yi, payload, expected_out, platform) in tasks
+            }
+            for fut in concurrent.futures.as_completed(futs):
+                pi, yi = futs[fut]
+                try:
+                    finding = fut.result()
+                except Exception:
+                    finding = None
+                if finding:
+                    cur = best.get(pi)
+                    if cur is None or yi < cur[0]:
+                        best[pi] = (yi, finding)
+        for pi, (_, finding) in best.items():
+            findings_by_pi[pi] = finding
+
+    for pi in range(len(params)):
+        if pi in findings_by_pi:
+            result["findings"].append(findings_by_pi[pi])
 
     return result
 

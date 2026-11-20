@@ -5,6 +5,8 @@ import re, ssl, logging, urllib.request, urllib.error, concurrent.futures
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
+from modules.utils.http_client import open_request
+
 logger = logging.getLogger("ReconX.param_finder")
 
 COMMON_PARAMS = [
@@ -47,7 +49,7 @@ def _fetch(url, timeout=8):
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0",
             "Accept": "text/html,*/*",
         })
-        with urllib.request.urlopen(req, timeout=timeout, context=_make_ctx()) as r:
+        with open_request(req, timeout=timeout) as r:
             return r.status, r.read(100000).decode("utf-8", errors="ignore")
     except urllib.error.HTTPError as e:
         try: return e.code, e.read(50000).decode("utf-8", errors="ignore")
@@ -55,7 +57,27 @@ def _fetch(url, timeout=8):
     except Exception:
         return None, None
 
-def _test_param(base_url, param, timeout=8):
+SIZE_DIFF_PCT = 15.0
+
+def _fetch_baseline(base_url, timeout=8):
+    """Fetch the untouched URL twice.
+
+    Returns ``((status, body), size_threshold_pct)`` or ``(None, SIZE_DIFF_PCT)``
+    when the page is unreachable. The threshold is raised to the size jitter
+    seen between the two fetches, so naturally varying pages do not flag every
+    parameter.
+    """
+    first = _fetch(base_url, timeout=timeout)
+    if first[0] is None:
+        return None, SIZE_DIFF_PCT
+    threshold = SIZE_DIFF_PCT
+    second = _fetch(base_url, timeout=timeout)
+    if second[0] == first[0] and first[1] and second[1] is not None:
+        jitter = abs(len(first[1]) - len(second[1])) / len(first[1]) * 100
+        threshold = max(threshold, jitter)
+    return first, threshold
+
+def _test_param(base_url, param, timeout=8, baseline=None, size_threshold=SIZE_DIFF_PCT):
     try:
         parsed = urlparse(base_url)
         existing = parse_qs(parsed.query)
@@ -66,7 +88,10 @@ def _test_param(base_url, param, timeout=8):
         status, body = _fetch(test_url, timeout=timeout)
         if status is None:
             return None
-        base_status, base_body = _fetch(base_url, timeout=timeout)
+        if baseline is None:
+            base_status, base_body = _fetch(base_url, timeout=timeout)
+        else:
+            base_status, base_body = baseline
         result = {"param": param, "test_url": test_url, "status": status,
                   "accepted": False, "reflected": False,
                   "confidence": 0.0, "indicators": []}
@@ -88,7 +113,7 @@ def _test_param(base_url, param, timeout=8):
             result["indicators"].append(f"status_changed_{base_status}_to_{status}")
         if body and base_body and len(base_body) > 0:
             diff_pct = abs(len(body) - len(base_body)) / len(base_body) * 100
-            if diff_pct > 15:
+            if diff_pct > size_threshold:
                 result["confidence"] = max(result["confidence"], 0.50)
                 result["indicators"].append(f"size_diff_{int(diff_pct)}pct")
         if result["confidence"] >= 0.5:
@@ -107,8 +132,13 @@ def run_param_finder(base_url, workers=20, custom_params=None, timeout=8):
     result = {"timestamp": datetime.now().isoformat(), "url": base_url,
               "accepted": [], "total_checked": len(params), "errors": []}
     print(f"  [*] Testing {len(params)} parameters...")
+    baseline, size_threshold = _fetch_baseline(base_url, timeout=timeout)
+    if baseline is None:
+        result["errors"].append(f"baseline request failed: {base_url}")
+        return result
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(_test_param, base_url, p, timeout): p for p in params}
+        futures = {ex.submit(_test_param, base_url, p, timeout, baseline, size_threshold): p
+                   for p in params}
         for future in concurrent.futures.as_completed(futures):
             try:
                 r = future.result(timeout=timeout + 5)

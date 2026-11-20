@@ -13,6 +13,7 @@ This wrapper adds:
 import os
 import re
 import json
+import time
 import shutil
 import logging
 import subprocess
@@ -60,6 +61,32 @@ def get_wordlists():
                 if f.endswith(".txt"):
                     wordlists[f] = os.path.join(base, f)
     return wordlists
+
+
+def default_wordlist():
+    """Path of the wordlist run_dirb picks by default (common.txt first), or None."""
+    wordlists = get_wordlists()
+    if "common.txt" in wordlists:
+        return wordlists["common.txt"]
+    if wordlists:
+        return list(wordlists.values())[0]
+    return None
+
+
+def load_wordlist(path, max_words=None):
+    """Read a dirb wordlist: one word per line, blanks and '#' comments skipped."""
+    words = []
+    seen = set()
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            word = line.strip()
+            if not word or word.startswith("#") or word in seen:
+                continue
+            seen.add(word)
+            words.append(word)
+            if max_words and len(words) >= max_words:
+                break
+    return words
 
 
 # ============================================================
@@ -141,13 +168,7 @@ def run_dirb(target, wordlist=None, extensions=None, timeout=300,
 
     # Auto-pick wordlist
     if not wordlist:
-        wordlists = get_wordlists()
-        if "common.txt" in wordlists:
-            wordlist = wordlists["common.txt"]
-        elif wordlists:
-            wordlist = list(wordlists.values())[0]
-        else:
-            wordlist = "/usr/share/dirb/wordlists/common.txt"
+        wordlist = default_wordlist() or "/usr/share/dirb/wordlists/common.txt"
 
     result["wordlist"] = wordlist
 
@@ -157,8 +178,8 @@ def run_dirb(target, wordlist=None, extensions=None, timeout=300,
     if extensions:
         cmd.extend(["-X", extensions])
 
-    if recurse:
-        cmd.append("-r")
+    if not recurse:
+        cmd.append("-r")  # dirb's -r means "don't search recursively"
 
     # Silent-ish output to file
     tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
@@ -196,7 +217,12 @@ def run_dirb(target, wordlist=None, extensions=None, timeout=300,
         except Exception:
             pass
 
-    # Summary
+    _summarize(result)
+    return result
+
+
+def _summarize(result):
+    """Fill result['summary'] and sort the findings by severity, then path."""
     by_sev = {}
     for f in result["findings"]:
         s = f.get("severity", "info")
@@ -207,14 +233,115 @@ def run_dirb(target, wordlist=None, extensions=None, timeout=300,
         "by_severity": by_sev,
     }
 
-    # Sort by severity
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     result["findings"].sort(
         key=lambda x: (sev_order.get(x.get("severity", "info"), 99),
                        x.get("path", ""))
     )
 
+
+# ============================================================
+# Threaded wordlist scan (in-process, no dirb binary needed)
+# ============================================================
+
+def run_dirb_threaded(target, wordlist=None, workers=30, timeout=8, budget=120,
+                      max_words=None):
+    """Scan a dirb wordlist with the in-process threaded directory buster.
+
+    dirb itself is single-threaded, so a common.txt pass rarely finishes
+    inside a recon run. This sends the same words through
+    modules.web.dir_buster (soft-404 filtering included) and returns the
+    run_dirb result shape, so summaries and reports read it unchanged.
+    ``workers`` caps concurrent requests to the target; ``budget`` caps the
+    whole scan in seconds, and paths not reached in time are counted in
+    ``unchecked``.
+    """
+    result = {
+        "timestamp": datetime.now().isoformat(),
+        "target": target,
+        "wordlist": wordlist,
+        "available": True,
+        "version": None,
+        "engine": "dir_buster",
+        "findings": [],
+        "summary": {},
+        "error": None,
+        "duration": 0,
+        "workers": workers,
+        "budget": budget,
+        "total_words": 0,
+        "total_checked": 0,
+        "unchecked": 0,
+        "filtered_soft404": 0,
+        "rate_limited": 0,
+        "soft_404_baseline": None,
+        "partial": False,
+    }
+
+    wordlist = wordlist or default_wordlist()
+    result["wordlist"] = wordlist
+    start = time.monotonic()
+    try:
+        if not wordlist or not os.path.isfile(wordlist):
+            result["error"] = "no dirb wordlist found"
+        else:
+            words = load_wordlist(wordlist, max_words=max_words)
+            result["total_words"] = len(words)
+            if words:
+                from modules.web.dir_buster import run_dir_bust
+                bust = run_dir_bust(target, workers=workers, paths=words,
+                                    timeout=timeout, budget=budget,
+                                    require_baseline=True)
+                _merge_bust(result, bust, budget)
+    except Exception as e:
+        result["error"] = str(e)
+
+    result["duration"] = round(time.monotonic() - start, 1)
+    _summarize(result)
     return result
+
+
+def _merge_bust(result, bust, budget):
+    """Convert a run_dir_bust result into dirb-style findings on ``result``."""
+    result["total_checked"] = bust.get("total_checked", 0)
+    result["unchecked"] = bust.get("unchecked", 0)
+    result["filtered_soft404"] = bust.get("filtered_soft404", 0)
+    result["soft_404_baseline"] = bust.get("soft_404_baseline")
+
+    for item in bust.get("found", []):
+        status = item.get("status")
+        if status == 404:
+            continue
+        if status == 429:
+            result["rate_limited"] += 1
+            continue
+        path = "/" + str(item.get("path", "")).lstrip("/")
+        size = item.get("size", 0)
+        severity, desc = _classify_path(path)
+
+        confidence = 0.85
+        if status == 200 and size > 0:
+            confidence = 0.95
+        elif status in (301, 302):
+            confidence = 0.80
+
+        result["findings"].append({
+            "path": path,
+            "url": item.get("url"),
+            "status": status,
+            "size": size,
+            "severity": severity,
+            "confidence": confidence,
+            "description": desc,
+            "source": "dir_buster",
+        })
+
+    if bust.get("unreachable"):
+        result["error"] = "no response from target (soft-404 baseline probes failed)"
+    elif bust.get("budget_exceeded"):
+        result["partial"] = True
+        result["error"] = (f"timeout after {budget}s "
+                           f"({result['unchecked']} of {result['total_words']} paths not checked)")
 
 
 # ============================================================

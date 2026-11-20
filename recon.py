@@ -28,6 +28,7 @@ Usage:
 
 import sys
 import json
+import time
 import logging
 import argparse
 import concurrent.futures
@@ -36,6 +37,17 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 sys.path.insert(0, str(BASE_DIR))
+
+# Time limits (seconds) for the parallel stage. A step still running at its
+# limit is reported as timed out and its result is left out of the report.
+STEP_TIMEOUT = 300
+STEP_TIMEOUTS = {"subdomains": 480}
+RECON_DEADLINE = 600
+SCREENSHOT_TIMEOUT = 600
+
+# Deep-mode dirb step: threaded scan of the dirb wordlist
+DIRB_WORKERS = 30
+DIRB_BUDGET = 120
 
 
 # ============================================================
@@ -99,14 +111,14 @@ def _safe_step(name, fn, *args, **kwargs):
 
 
 # ============================================================
-# 1. Domain OSINT (sequential — needed first)
+# 1. Domain OSINT
 # ============================================================
 
-def step_domain(target):
+def step_domain(target, ips=None):
     section(1, 14, "🌐 Domain OSINT")
     try:
         from modules.web.domain_osint import run_domain_osint
-        result = run_domain_osint(target, deep=False)
+        result = run_domain_osint(target, deep=False, ips=ips)
 
         ips = result.get("ips", {}).get("A", [])
         subs = result.get("subdomains", [])
@@ -306,20 +318,26 @@ def step_subdomains(target, deep=True):
         for src, count in sorted(by_src.items()):
             marker = "✓" if count > 0 else "·"
             print(f"      {marker} {src:<20} {count}")
+        if result.get("wildcard"):
+            print(f"  {C.YELLOW}⚠ Wildcard DNS ({', '.join(result.get('wildcard_ips', [])[:3])}): "
+                  f"brute-force hits on the wildcard IPs were dropped{C.RESET}")
 
         if result.get("subdomains"):
             print(f"\n  {C.BOLD}Top subdomains:{C.RESET}")
             for s in result["subdomains"][:15]:
                 print(f"      → {s['hostname']:<45} {s['ip']}")
 
-            # Which of them actually serve HTTP(S)?
+            # Which of them actually serve HTTP(S)? Names that never
+            # resolved cannot answer, so they are not probed.
+            resolved = [s["hostname"] for s in result["subdomains"]
+                        if s.get("ip") or s.get("ipv6")]
+            skipped = len(result["subdomains"]) - len(resolved)
+            note = f" ({skipped} unresolved skipped)" if skipped else ""
             try:
                 from modules.web.live_probe import probe_hosts
-                print(f"\n  {C.GRAY}Probing HTTP(S) on discovered subdomains...{C.RESET}")
-                probe = probe_hosts(
-                    [s["hostname"] for s in result["subdomains"]],
-                    threads=20, timeout=5,
-                )
+                print(f"\n  {C.GRAY}Probing HTTP(S) on {len(resolved)} resolved "
+                      f"subdomains{note}...{C.RESET}")
+                probe = probe_hosts(resolved, timeout=5)
                 result["live"] = probe
                 print(f"  {C.GREEN}✓{C.RESET} Live web hosts:    {probe['alive']} "
                       f"(of {probe['total']})")
@@ -635,16 +653,27 @@ def step_dirb_engine(target, deep=True):
         return {}
 
     try:
-        from modules.vuln.dirb_engine import is_dirb_available, run_dirb
-
-        if not is_dirb_available():
-            print(f"  {C.YELLOW}⚠ DIRB not installed (sudo apt install dirb){C.RESET}")
-            return {"available": False, "error": "not_installed"}
+        from modules.vuln.dirb_engine import (
+            default_wordlist, is_dirb_available, run_dirb, run_dirb_threaded,
+        )
 
         base_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
-        print(f"  [*] Running DIRB on {base_url} (timeout 180s)...")
+        wordlist = default_wordlist()
 
-        result = run_dirb(base_url, timeout=180, verbose=False)
+        if wordlist:
+            # dirb is single-threaded and would pin the run at its timeout;
+            # scan the same wordlist with the threaded in-process buster.
+            print(f"  [*] Scanning {base_url} with the dirb wordlist "
+                  f"({DIRB_WORKERS} threads, budget {DIRB_BUDGET}s)...")
+            result = run_dirb_threaded(base_url, wordlist=wordlist,
+                                       workers=DIRB_WORKERS, budget=DIRB_BUDGET)
+        else:
+            if not is_dirb_available():
+                print(f"  {C.YELLOW}⚠ DIRB not installed (sudo apt install dirb){C.RESET}")
+                return {"available": False, "error": "not_installed"}
+
+            print(f"  [*] Running DIRB on {base_url} (timeout 180s)...")
+            result = run_dirb(base_url, timeout=180, verbose=False)
 
         findings = result.get("findings", [])
         summary = result.get("summary", {})
@@ -655,6 +684,8 @@ def step_dirb_engine(target, deep=True):
 
         by_sev = summary.get("by_severity", {})
         print(f"  {C.GREEN}✓{C.RESET} Paths found:  {len(findings)}")
+        if result.get("error"):
+            print(f"  {C.YELLOW}⚠ {result['error']}{C.RESET}")
         if by_sev:
             icons = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪"}
             parts = []
@@ -875,6 +906,8 @@ def build_summary(target, steps):
             "indicators": indicators,
             "total": len(indicators),
         },
+        "timed_out_steps": [name for name, value in steps.items()
+                            if isinstance(value, dict) and value.get("timed_out")],
     }
 
 
@@ -948,6 +981,11 @@ def print_summary(summary):
                 icons = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪"}
                 print(f"    {icons[sev]} {sev.capitalize():<10} {by_sev[sev]}")
 
+    timed_out = summary.get("timed_out_steps") or []
+    if timed_out:
+        print(f"\n  {C.BOLD}{C.YELLOW}⏱ TIMED OUT (not in this report){C.RESET}")
+        print(f"    Steps:           {', '.join(timed_out)}")
+
     risk = summary["risk"]
     counts = risk["severity_counts"]
     print(f"\n  {C.BOLD}{C.MAGENTA}⚠ RISK SUMMARY{C.RESET}")
@@ -972,12 +1010,100 @@ def print_summary(summary):
 
 
 # ============================================================
+# Parallel runner with real time limits
+# ============================================================
+
+def _run_parallel(tasks, step_timeout=STEP_TIMEOUT, deadline=RECON_DEADLINE,
+                  step_timeouts=None, on_done=None, extra_workers=0):
+    """Run {name: (fn, args, kwargs)} at once and collect the results.
+
+    Each step must finish within its own timeout (step_timeouts[name], else
+    step_timeout) and within the overall deadline, both counted from the
+    start. A step that misses its limit is recorded as
+    {"error": ..., "timed_out": True, "partial": True}; its thread cannot be
+    killed, so it keeps running in the background and its result is dropped.
+    on_done(name, result, submit) runs as each step ends (or times out) and
+    may start a follow-up step with submit(name, fn, args, kwargs, timeout),
+    which is bounded by its own timeout only. A timeout or deadline of 0 or
+    None means no limit. Returns (results, timed_out_names).
+    """
+    step_timeouts = step_timeouts or {}
+    start = time.monotonic()
+    hard_stop = start + deadline if deadline else None
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks) + extra_workers)
+    names, limits, started = {}, {}, {}
+    pending = set()
+    results = {}
+    timed_out = []
+
+    def submit(name, fn, args=(), kwargs=None, timeout=None, stop=None):
+        now = time.monotonic()
+        limit = now + timeout if timeout else None
+        if stop is not None:
+            limit = stop if limit is None else min(limit, stop)
+        future = ex.submit(_safe_step, name, fn, *args, **(kwargs or {}))
+        names[future] = name
+        limits[future] = limit
+        started[future] = now
+        pending.add(future)
+
+    def finish(name, value):
+        results[name] = value
+        if on_done:
+            on_done(name, value, submit)
+
+    for name, (fn, args, kwargs) in tasks.items():
+        submit(name, fn, args, kwargs,
+               timeout=step_timeouts.get(name, step_timeout), stop=hard_stop)
+
+    try:
+        while pending:
+            due = [limits[f] for f in pending if limits[f] is not None]
+            wait_for = max(0.0, min(due) - time.monotonic()) if due else None
+            done, _ = concurrent.futures.wait(
+                pending, timeout=wait_for,
+                return_when=concurrent.futures.FIRST_COMPLETED)
+
+            for future in done:
+                pending.discard(future)
+                name = names[future]
+                try:
+                    value = future.result()
+                except Exception as e:
+                    print(f"{C.RED}✗ [{name}] thread failed: {e}{C.RESET}")
+                    value = {}
+                finish(name, value)
+
+            now = time.monotonic()
+            for future in [f for f in pending
+                           if limits[f] is not None and limits[f] <= now]:
+                pending.discard(future)
+                future.cancel()
+                name = names[future]
+                elapsed = int(now - started[future])
+                print(f"\n  {C.YELLOW}⏱ [{name}] timed out after {elapsed}s — "
+                      f"left out of the report{C.RESET}")
+                timed_out.append(name)
+                finish(name, {"error": f"timeout after {elapsed}s",
+                              "timed_out": True, "partial": True})
+    finally:
+        ex.shutdown(wait=False)
+
+    return results, timed_out
+
+
+# ============================================================
 # Main Recon Runner (PARALLEL)
 # ============================================================
 
 def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3,
-              screenshots=False):
-    """Run full web recon with parallel execution."""
+              screenshots=False, step_timeout=None, deadline=RECON_DEADLINE):
+    """Run full web recon with parallel execution.
+
+    step_timeout: seconds each step may take (None = per-step defaults,
+    0 = no limit). deadline: seconds for the whole parallel stage (0 or
+    None = no limit). Steps that miss a limit are reported as timed out.
+    """
     target = target.strip().lower()
     if target.startswith(("http://", "https://")):
         target = target.split("://", 1)[1].rstrip("/")
@@ -988,13 +1114,18 @@ def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3,
     start_time = datetime.now()
     steps = {}
 
-    # === Step 1: Domain (must be first — provides IPs) ===
-    steps["domain"] = _safe_step("domain", step_domain, target)
-    ips = steps["domain"].get("ips", {}).get("A", [])
+    # The IP-based steps only need the A records; Domain OSINT runs in the pool.
+    try:
+        from modules.web.domain_osint import _resolve_all_ips
+        target_ips = _resolve_all_ips(target)
+    except Exception:
+        target_ips = {"A": [], "AAAA": []}
+    ips = target_ips["A"]
     primary_ip = ips[0] if ips else None
 
-    # === Steps 2-8: Run independent steps in PARALLEL ===
+    # === Run every step in PARALLEL ===
     parallel_tasks = {
+        "domain":      (step_domain, (target,), {"ips": target_ips}),
         "ip":          (step_ip_multi, (ips,), {"max_ips": max_ips}),
         "ports":       (step_ports, (primary_ip,), {"fast": not deep}),
         "dns":         (step_dns, (target,), {}),
@@ -1009,27 +1140,40 @@ def run_recon(target, deep=True, save_json=False, output_file=None, max_ips=3,
         "dirb":        (step_dirb_engine, (target,), {"deep": deep}),
     }
 
+    if step_timeout is None:
+        step_timeout, step_timeouts = STEP_TIMEOUT, STEP_TIMEOUTS
+    else:
+        step_timeouts = {}
+
+    limits = []
+    if step_timeout:
+        limits.append(f"{step_timeout}s per step")
+    if deadline:
+        limits.append(f"{deadline}s overall")
+    limit_note = f" ({', '.join(limits)})" if limits else ""
+
     print(f"\n{C.CYAN}{'═' * 70}{C.RESET}")
-    print(f"{C.BOLD}{C.WHITE}  ⚡ Running {len(parallel_tasks)} steps in PARALLEL...{C.RESET}")
+    print(f"{C.BOLD}{C.WHITE}  ⚡ Running {len(parallel_tasks)} steps in PARALLEL"
+          f"{limit_note}...{C.RESET}")
     print(f"{C.CYAN}{'═' * 70}{C.RESET}\n")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(parallel_tasks)) as ex:
-        futures = {}
-        for name, (fn, args, kwargs) in parallel_tasks.items():
-            futures[ex.submit(_safe_step, name, fn, *args, **kwargs)] = name
+    # === Optional: screenshot the live hosts as soon as the probe is done ===
+    def start_screenshots(name, value, submit):
+        if screenshots and name == "subdomains":
+            submit("screenshots", step_screenshots, (target, value), {},
+                   timeout=SCREENSHOT_TIMEOUT)
 
-        for future in concurrent.futures.as_completed(futures):
-            name = futures[future]
-            try:
-                steps[name] = future.result(timeout=300)
-            except Exception as e:
-                print(f"{C.RED}✗ [{name}] thread failed: {e}{C.RESET}")
-                steps[name] = {}
+    results, _ = _run_parallel(
+        parallel_tasks, step_timeout=step_timeout, deadline=deadline,
+        step_timeouts=step_timeouts, on_done=start_screenshots,
+        extra_workers=1 if screenshots else 0)
 
-    # === Optional: screenshot the live hosts (after enumeration) ===
-    if screenshots:
-        steps["screenshots"] = _safe_step(
-            "screenshots", step_screenshots, target, steps.get("subdomains", {}))
+    for name in parallel_tasks:
+        steps[name] = results.get(name, {})
+    if isinstance(steps["domain"], dict) and "ips" not in steps["domain"]:
+        steps["domain"]["ips"] = target_ips
+    if "screenshots" in results:
+        steps["screenshots"] = results["screenshots"]
 
     # === Build final result ===
     result = {
@@ -1070,6 +1214,7 @@ Examples:
   python recon.py example.com --output report.json
   python recon.py example.com --max-ips 5
   python recon.py example.com --screenshots
+  python recon.py example.com --budget 300
         """
     )
     parser.add_argument("target", help="Domain or URL to scan")
@@ -1082,8 +1227,16 @@ Examples:
     parser.add_argument("--max-ips", type=int, default=3,
                         help="Max IPs to check in IP OSINT (default: 3)")
     parser.add_argument("--screenshots", action="store_true",
-                        help="Screenshot live subdomains after the scan "
+                        help="Screenshot live subdomains as soon as they are probed "
                              "(saved to outputs/screenshots — needs Playwright or Chrome)")
+    parser.add_argument("--budget", type=int, default=RECON_DEADLINE,
+                        help=f"Overall time limit in seconds for the scan steps; "
+                             f"steps still running are reported as timed out "
+                             f"(default: {RECON_DEADLINE}, 0 = no limit)")
+    parser.add_argument("--step-timeout", type=int, default=None,
+                        help=f"Time limit in seconds for each step (default: "
+                             f"{STEP_TIMEOUT}, subdomains {STEP_TIMEOUTS['subdomains']}; "
+                             f"0 = no limit)")
     parser.add_argument("--quiet", "-q", action="store_true",
                         help="Quiet mode")
     parser.add_argument("--version", action="version", version="ReconX v5.0.0")
@@ -1101,6 +1254,8 @@ Examples:
             output_file=args.output,
             max_ips=args.max_ips,
             screenshots=args.screenshots,
+            step_timeout=args.step_timeout,
+            deadline=args.budget,
         )
         return 0
     except KeyboardInterrupt:

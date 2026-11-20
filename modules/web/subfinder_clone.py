@@ -7,14 +7,24 @@ Adds cross-validation confidence scores.
 import socket
 import ssl
 import json
+import time
+import secrets
 import logging
+import http.client
 import urllib.request
 import urllib.error
 import urllib.parse
 import concurrent.futures
 from datetime import datetime
 
+from modules.utils.crtsh import crtsh_lookup, is_timeout
+
 logger = logging.getLogger("ReconX.subfinder")
+
+PASSIVE_TIMEOUT = 60
+RESOLVE_TIMEOUT = 60
+DNS_WORKERS = 50
+WILDCARD_PROBES = 3
 
 
 # ============================================================
@@ -69,6 +79,13 @@ def _make_ctx():
     return ctx
 
 
+def _is_transient(exc):
+    """Connection resets and broken HTTP exchanges are worth one retry."""
+    if isinstance(exc, urllib.error.URLError):
+        exc = exc.reason
+    return isinstance(exc, (ConnectionError, http.client.HTTPException))
+
+
 def _fetch(url, timeout=20, retries=2):
     """Fetch URL text with retries + UA rotation."""
     import random
@@ -87,6 +104,9 @@ def _fetch(url, timeout=20, retries=2):
             with urllib.request.urlopen(req, timeout=timeout, context=_make_ctx()) as r:
                 return r.read(500000).decode("utf-8", errors="ignore")
         except urllib.error.HTTPError as e:
+            if e.code >= 500 and attempt < retries:
+                _time.sleep(2)
+                continue
             try:
                 return e.read(100000).decode("utf-8", errors="ignore")
             except Exception:
@@ -94,7 +114,9 @@ def _fetch(url, timeout=20, retries=2):
                     _time.sleep(2)
                     continue
                 return None
-        except Exception:
+        except Exception as e:
+            if is_timeout(e) or not _is_transient(e):
+                return None
             if attempt < retries:
                 _time.sleep(2)
                 continue
@@ -108,22 +130,7 @@ def _fetch(url, timeout=20, retries=2):
 # ============================================================
 
 def _src_crtsh(domain):
-    subs = set()
-    try:
-        url = f"https://crt.sh/?q=%25.{domain}&output=json"
-        body = _fetch(url, timeout=30)
-        if not body:
-            return subs
-        data = json.loads(body)
-        for entry in data:
-            name = entry.get("name_value", "")
-            for n in name.split("\n"):
-                n = n.strip().lower()
-                if n.endswith(f".{domain}") and "*" not in n and n != domain:
-                    subs.add(n)
-    except Exception as e:
-        logger.debug(f"crt.sh failed: {e}")
-    return subs
+    return crtsh_lookup(domain, timeout=30)
 
 
 def _src_hackertarget(domain):
@@ -298,6 +305,56 @@ def _bruteforce(domain, wordlist, workers=50):
     return found
 
 
+def _random_label():
+    return "rxwc-" + secrets.token_hex(6)
+
+
+def _bruteforce_wildcard_aware(domain, wordlist, executor, probes=WILDCARD_PROBES):
+    """Brute-force ``wordlist`` on ``executor`` and drop wildcard-DNS hits.
+
+    ``probes`` random labels are resolved first; if any of them resolves the
+    zone has a wildcard record, and hits whose addresses all belong to the
+    wildcard set are dropped. Returns (found {hostname: {"A", "AAAA"}},
+    wildcard address set, dropped hostnames).
+    """
+    probe_futures = [
+        executor.submit(_resolve_all, f"{_random_label()}.{domain}")
+        for _ in range(probes)
+    ]
+    hostnames = list(dict.fromkeys(f"{word}.{domain}" for word in wordlist))
+    word_futures = {executor.submit(_resolve_all, h): h for h in hostnames}
+
+    wildcard_ips = set()
+    for future in probe_futures:
+        try:
+            ips = future.result()
+        except Exception:
+            continue
+        wildcard_ips.update(ips["A"])
+        wildcard_ips.update(ips["AAAA"])
+
+    found, dropped = {}, []
+    for future, hostname in word_futures.items():
+        try:
+            ips = future.result()
+        except Exception:
+            continue
+        addrs = set(ips["A"]) | set(ips["AAAA"])
+        if not addrs:
+            continue
+        if wildcard_ips and addrs <= wildcard_ips:
+            dropped.append(hostname)
+            continue
+        found[hostname] = ips
+    return found, wildcard_ips, sorted(dropped)
+
+
+def _remaining(deadline):
+    if deadline is None:
+        return None
+    return max(0.0, deadline - time.monotonic())
+
+
 # ============================================================
 # Confidence Scoring
 # ============================================================
@@ -354,8 +411,18 @@ def _compute_confidence(sources_list, resolved_ips):
 # ============================================================
 
 def run_subfinder_clone(domain, passive=True, bruteforce=True,
-                        workers=30, verbose=True):
-    """Full subdomain enumeration with confidence scoring."""
+                        workers=30, verbose=True, passive_timeout=PASSIVE_TIMEOUT,
+                        resolve_timeout=RESOLVE_TIMEOUT, dns_workers=DNS_WORKERS,
+                        wildcard_probes=WILDCARD_PROBES):
+    """Full subdomain enumeration with confidence scoring.
+
+    Brute force starts alongside the passive sources and each source's names
+    are resolved as soon as that source answers. ``passive_timeout`` and
+    ``resolve_timeout`` bound the passive and DNS stages (stragglers are
+    recorded in ``errors``); ``dns_workers`` caps parallel DNS lookups.
+    Wildcard DNS is detected with ``wildcard_probes`` random labels (0 turns
+    it off) and brute-force hits that only point at the wildcard are dropped.
+    """
     result = {
         "timestamp": datetime.now().isoformat(),
         "domain": domain,
@@ -364,37 +431,59 @@ def run_subfinder_clone(domain, passive=True, bruteforce=True,
         "total": 0,
         "errors": [],
         "confidence_summary": {"HIGH": 0, "MEDIUM": 0, "LOW": 0},
+        "wildcard": False,
+        "wildcard_ips": [],
+        "wildcard_filtered": 0,
     }
 
     # Map subdomain -> list of sources
     sub_sources = {}
+    resolved_data = {}
+    resolve_futures = {}
+    queued = set()
 
-    # === Passive sources ===
-    if passive:
-        sources = [
-            ("crt.sh", _src_crtsh),
-            ("hackertarget", _src_hackertarget),
-            ("rapiddns", _src_rapiddns),
-            ("alienvault", _src_alienvault),
-            ("urlscan", _src_urlscan),
-            ("webarchive", _src_webarchive),
-            ("threatcrowd", _src_threatcrowd),
-        ]
+    dns_ex = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, dns_workers))
+    task_ex = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
-        if verbose:
-            print(f"  {C_CYAN}[*]{C_RST} Querying {len(sources)} passive sources...")
+    def queue_resolve(host):
+        if host not in queued:
+            queued.add(host)
+            resolve_futures[dns_ex.submit(_resolve_all, host)] = host
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(sources)) as ex:
-            futures = {ex.submit(fn, domain): name for name, fn in sources}
+    try:
+        bf_future = None
+        if bruteforce:
+            bf_future = task_ex.submit(_bruteforce_wildcard_aware, domain, WORDLIST,
+                                       dns_ex, probes=wildcard_probes)
 
-            for future in concurrent.futures.as_completed(futures):
+        # === Passive sources (names are resolved as each source answers) ===
+        if passive:
+            sources = [
+                ("crt.sh", _src_crtsh),
+                ("hackertarget", _src_hackertarget),
+                ("rapiddns", _src_rapiddns),
+                ("alienvault", _src_alienvault),
+                ("urlscan", _src_urlscan),
+                ("webarchive", _src_webarchive),
+                ("threatcrowd", _src_threatcrowd),
+            ]
+
+            if verbose:
+                print(f"  {C_CYAN}[*]{C_RST} Querying {len(sources)} passive sources...")
+
+            futures = {task_ex.submit(fn, domain): name for name, fn in sources}
+            handled = set()
+
+            def handle(future):
+                handled.add(future)
                 name = futures[future]
                 try:
-                    subs = future.result(timeout=40)
+                    subs = future.result()
                     if subs:
                         result["by_source"][name] = len(subs)
                         for sub in subs:
                             sub_sources.setdefault(sub, []).append(name)
+                            queue_resolve(sub)
                         if verbose:
                             print(f"      {C_GREEN}✓{C_RST} {name}: {len(subs)}")
                     else:
@@ -405,34 +494,76 @@ def run_subfinder_clone(domain, passive=True, bruteforce=True,
                     if verbose:
                         print(f"      {C_RED}✗{C_RST} {name}: error")
 
-    # === Brute force ===
-    if bruteforce:
-        if verbose:
-            print(f"  {C_CYAN}[*]{C_RST} Brute-forcing {len(WORDLIST)} words...")
-
-        bf_found = _bruteforce(domain, WORDLIST, workers=50)
-        result["by_source"]["bruteforce"] = len(bf_found)
-        for sub in bf_found.keys():
-            sub_sources.setdefault(sub, []).append("bruteforce")
-
-        if verbose:
-            print(f"      {C_GREEN}✓{C_RST} bruteforce: {len(bf_found)}")
-
-    # === Resolve IPs (parallel) ===
-    if verbose:
-        print(f"  {C_CYAN}[*]{C_RST} Resolving {len(sub_sources)} candidates...")
-
-    resolved_data = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as ex:
-        futures = {ex.submit(_resolve_all, host): host for host in sub_sources}
-        for future in concurrent.futures.as_completed(futures):
             try:
-                ips = future.result(timeout=8)
-                host = futures[future]
+                for future in concurrent.futures.as_completed(futures, timeout=passive_timeout):
+                    handle(future)
+            except concurrent.futures.TimeoutError:
+                for future, name in futures.items():
+                    if future in handled:
+                        continue
+                    if future.done():
+                        handle(future)
+                        continue
+                    future.cancel()
+                    result["errors"].append(f"{name}: timeout after {passive_timeout}s")
+                    if verbose:
+                        print(f"      {C_RED}✗{C_RST} {name}: timeout")
+
+        dns_deadline = None
+        if resolve_timeout is not None:
+            dns_deadline = time.monotonic() + resolve_timeout
+
+        # === Brute force (already running; wildcard hits filtered) ===
+        if bruteforce:
+            if verbose:
+                print(f"  {C_CYAN}[*]{C_RST} Brute-forcing {len(WORDLIST)} words...")
+
+            bf_found, wildcard_ips, dropped = {}, set(), []
+            try:
+                bf_found, wildcard_ips, dropped = bf_future.result(timeout=_remaining(dns_deadline))
+            except concurrent.futures.TimeoutError:
+                result["errors"].append(f"bruteforce: timeout after {resolve_timeout}s")
+            except Exception as e:
+                result["errors"].append(f"bruteforce: {e}")
+
+            result["wildcard"] = bool(wildcard_ips)
+            result["wildcard_ips"] = sorted(wildcard_ips)
+            result["wildcard_filtered"] = len(dropped)
+            result["by_source"]["bruteforce"] = len(bf_found)
+            for sub, ips in bf_found.items():
+                sub_sources.setdefault(sub, []).append("bruteforce")
+                if sub not in queued:
+                    resolved_data[sub] = ips
+
+            if verbose:
+                print(f"      {C_GREEN}✓{C_RST} bruteforce: {len(bf_found)}")
+                if wildcard_ips:
+                    print(f"      {C_GRAY}·{C_RST} wildcard DNS ({', '.join(sorted(wildcard_ips)[:3])}): "
+                          f"dropped {len(dropped)} brute-force hits")
+
+        # === Resolve IPs (parallel, started as sources answered) ===
+        if verbose:
+            print(f"  {C_CYAN}[*]{C_RST} Resolving {len(sub_sources)} candidates...")
+
+        if resolve_futures:
+            _, pending = concurrent.futures.wait(resolve_futures, timeout=_remaining(dns_deadline))
+            if pending:
+                result["errors"].append(
+                    f"resolve: {len(pending)} candidates not resolved within {resolve_timeout}s")
+            for future, host in resolve_futures.items():
+                if not future.done() or future.cancelled():
+                    continue
+                try:
+                    ips = future.result()
+                except Exception:
+                    continue
                 if ips["A"] or ips["AAAA"]:
                     resolved_data[host] = ips
-            except Exception:
-                pass
+    finally:
+        for future in resolve_futures:
+            future.cancel()
+        task_ex.shutdown(wait=False)
+        dns_ex.shutdown(wait=False)
 
     # === Build results with confidence ===
     for hostname in sorted(sub_sources.keys()):

@@ -4,6 +4,7 @@ Uses multi-baseline + body hash for accurate filtering.
 """
 
 import ssl
+import time
 import random
 import string
 import hashlib
@@ -12,6 +13,8 @@ import urllib.request
 import urllib.error
 import concurrent.futures
 from datetime import datetime
+
+from modules.utils import http_client
 
 logger = logging.getLogger("ReconX.dirbuster")
 
@@ -95,6 +98,23 @@ def _make_ctx():
 # HTTP Fetch
 # ============================================================
 
+# Unread body bytes (Content-Length known) worth reading and discarding so the
+# keep-alive connection can be reused; larger bodies drop the connection.
+DRAIN_MAX = 65536
+
+
+def _read_body(resp, max_body):
+    """Read up to max_body bytes, draining a small remainder for reuse."""
+    body = resp.read(max_body)
+    left = getattr(resp, "length", None)
+    if left and left <= DRAIN_MAX and http_client.keepalive_enabled():
+        try:
+            resp.read(left)
+        except Exception:
+            pass
+    return body
+
+
 def _fetch(base_url, path, timeout=8, max_body=8000):
     """
     Fetch a path.
@@ -110,32 +130,28 @@ def _fetch(base_url, path, timeout=8, max_body=8000):
                               "AppleWebKit/537.36 Chrome/120.0.0.0",
                 "Accept": "text/html,*/*",
                 "Accept-Language": "en-US,en;q=0.9",
-                "Connection": "close",
             },
         )
 
-        # Don't follow redirects automatically — we want to see them
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
-
-        opener = urllib.request.build_opener(
-            NoRedirect,
-            urllib.request.HTTPSHandler(context=_make_ctx()),
-        )
-
+        # Redirects are not followed (we want to see them); the shared opener
+        # reuses one keep-alive connection per worker thread.
         try:
-            r = opener.open(req, timeout=timeout)
-            status = r.status
-            headers = dict(r.headers)
-            body = r.read(max_body)
+            r = http_client.open_request(req, timeout=timeout, allow_redirects=False)
+            try:
+                status = r.status
+                headers = dict(r.headers)
+                body = _read_body(r, max_body)
+            finally:
+                r.close()
         except urllib.error.HTTPError as e:
             status = e.code
             headers = dict(e.headers) if e.headers else {}
             try:
-                body = e.read(max_body)
+                body = _read_body(e.fp, max_body) if e.fp is not None else b""
             except Exception:
                 body = b""
+            finally:
+                e.close()
 
         body_text = body.decode("utf-8", errors="ignore")
         body_hash = hashlib.md5(body[:5000]).hexdigest()
@@ -176,11 +192,12 @@ def _detect_soft_404(base_url, probes=3):
     Returns the most common response signature.
     """
     signatures = []
+    rand_paths = [_random_path(16 + i) for i in range(probes)]
 
-    for i in range(probes):
-        rand_path = _random_path(16 + i)
-        result = _fetch(base_url, rand_path, timeout=8)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, probes)) as ex:
+        results = list(ex.map(lambda p: _fetch(base_url, p, timeout=8), rand_paths))
 
+    for result in results:
         if result:
             signatures.append({
                 "status": result["status"],
@@ -296,13 +313,21 @@ def _classify_finding(result, baseline):
 # Main
 # ============================================================
 
-def run_dir_bust(base_url, workers=40, paths=None, timeout=8):
-    """Bust directories with enhanced soft-404 detection."""
+def run_dir_bust(base_url, workers=40, paths=None, timeout=8, budget=None,
+                 require_baseline=False):
+    """Bust directories with enhanced soft-404 detection.
+
+    budget: overall time limit in seconds (baseline included); paths not
+    checked in time are counted in result['unchecked'].
+    require_baseline: stop before the scan when no baseline probe got any
+    response (the target is unreachable); sets result['unreachable'].
+    """
     if paths is None:
         paths = COMMON_PATHS
 
     if not base_url.startswith(("http://", "https://")):
         base_url = "https://" + base_url
+    deadline = time.monotonic() + budget if budget else None
 
     result = {
         "timestamp": datetime.now().isoformat(),
@@ -327,6 +352,12 @@ def run_dir_bust(base_url, workers=40, paths=None, timeout=8):
               f"size={baseline['size']}, {consistent}")
     else:
         print(f"  [!] No baseline detected (server may be unreachable)")
+        if require_baseline:
+            result["unreachable"] = True
+            result["total_checked"] = 0
+            result["unchecked"] = len(paths)
+            result["errors"].append("no response to the soft-404 baseline probes")
+            return result
 
     # === Scan ===
     print(f"  [*] Scanning {len(paths)} paths ({workers} workers)...")
@@ -334,12 +365,16 @@ def run_dir_bust(base_url, workers=40, paths=None, timeout=8):
     def check(path):
         return _fetch(base_url, path, timeout=timeout)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(check, p): p for p in paths}
-
-        for future in concurrent.futures.as_completed(futures):
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+    futures = {ex.submit(check, p): p for p in paths}
+    remaining = None
+    if deadline is not None:
+        remaining = max(0.0, deadline - time.monotonic())
+    timed_out = False
+    try:
+        for future in concurrent.futures.as_completed(futures, timeout=remaining):
             try:
-                r = future.result(timeout=timeout + 5)
+                r = future.result()
                 if not r:
                     continue
 
@@ -369,6 +404,20 @@ def run_dir_bust(base_url, workers=40, paths=None, timeout=8):
 
             except Exception as e:
                 result["errors"].append(str(e))
+    except concurrent.futures.TimeoutError:
+        timed_out = True
+        unchecked = 0
+        for future in futures:
+            if not future.done():
+                future.cancel()
+                unchecked += 1
+        result["budget_exceeded"] = True
+        result["unchecked"] = unchecked
+        result["total_checked"] = len(paths) - unchecked
+        result["errors"].append(
+            f"time budget of {budget}s exceeded: {unchecked} paths not checked")
+    finally:
+        ex.shutdown(wait=not timed_out)
 
     # Sort by severity then path
     severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
