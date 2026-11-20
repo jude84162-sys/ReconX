@@ -37,8 +37,13 @@ cp .env.example .env         # then edit .env
 #   SCORPION_SCOPE=example.com,*.example.com    (REQUIRED to scan anything)
 #   TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...  (optional)
 
-python3 -m scorpion          # dashboard at http://127.0.0.1:8778
+python3 -m scorpion.selfcheck    # verify keys/scope/telegram are wired up
+python3 -m scorpion              # dashboard at http://127.0.0.1:8778
 ```
+
+`selfcheck` reads the same `.env`, never prints secrets, and with `--live`
+makes one tiny Claude call and sends one Telegram test message. Use
+`--find-chat-id` to discover your `TELEGRAM_CHAT_ID` (message the bot first).
 
 Reach the dashboard from your laptop over an SSH tunnel — never expose it:
 
