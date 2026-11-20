@@ -1,6 +1,13 @@
-# 🔍 ReconX
+# 🦂 Scorpion.ai
 
-**Web Recon & Vulnerability Suite** — 38 modules for Termux, Kali, and WSL.
+**Autonomous recon & bug-bounty agent** — give it a target in scope and it
+plans, runs the recon/vuln tools, reads the results, decides the next step, and
+reports. Built on 38 stdlib recon modules (formerly **ReconX**), with a live web
+dashboard, Telegram alerts, and voice.
+
+> **Authorized testing only.** Scorpion refuses any target outside the scope you
+> declare (fail-closed). You are responsible for having permission to test what
+> you point it at.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Termux%20%7C%20Kali%20%7C%20WSL-green.svg)]()
@@ -128,25 +135,40 @@ We don't claim "99% accuracy" — here's the honest picture:
 ### Quick Start
 
 ```bash
-git clone https://github.com/jude84162-sys/ReconX.git
+git clone -b claude/old-computer-server-tinm86 https://github.com/jude84162-sys/ReconX.git
 cd ReconX
 
-# Interactive CLI
-python cli.py
+# The agent + dashboard (recommended)
+cp .env.example .env     # set SCORPION_SCOPE=example.com ; ANTHROPIC_API_KEY optional
+python3 -m scorpion      # → http://127.0.0.1:8778
 
-# Non-interactive
+# Or the scriptable full-recon engine directly
 python recon.py example.com
 ```
 
+Without an API key, Scorpion runs in **deterministic-planner mode** (no LLM); with
+a key it uses a Claude model as the brain. See [`scorpion/README.md`](scorpion/README.md).
+
 ## 📖 Usage
 
-Interactive CLI (Recommended)
+### The agent (recommended)
 
 ```bash
-python cli.py
+python3 -m scorpion        # dashboard at http://127.0.0.1:8778
 ```
 
-38 tools organized into 11 sections:
+Reach it from your laptop over an SSH tunnel — never expose the dashboard:
+
+```bash
+ssh -L 8778:127.0.0.1:8778 user@server
+```
+
+The agent drives the 38 modules below as tools. Every tool call passes the
+**Scope Guard** before a packet is sent.
+
+### The 38 modules (what the agent drives)
+
+organized into 11 sections:
 
 ```
 ── Recon Modules ──
@@ -200,22 +222,17 @@ python cli.py
 [38] 📸 Screenshot Gallery (aquatone-style)
 ```
 
-Web GUI
+### Dashboard
 
-```bash
-python reconx_gui/server.py                    # → http://127.0.0.1:8777
-python reconx_gui/server.py --port 9000 --no-browser
-```
+`python3 -m scorpion` serves the Scorpion.ai dashboard (stdlib `http.server`, no
+Flask, no pip): a target + scope box, a live agent-activity log streamed over SSE
+(you watch it decide and run tools in real time), a findings panel ranked by
+severity, the generated report, and a chat box to steer the agent. The Scope
+Guard refuses anything outside your allow-list, and secrets are never echoed back
+to the page.
 
-The browser UI in `reconx_gui/` drives the same 38 tools as `cli.py` through the
-same `modules/` engines — all 38 bind to a real module when the folder sits at
-the repo root. `engine/builtins.py` adds ~20 standalone stdlib scanners as a
-fallback if the modules are missing, so the UI still runs standalone. It adds a
-live-streaming console (SSE), findings ranked by severity, replayable scan
-history and JSON export to `reconx_gui/outputs/`; active and intrusive tools stay
-locked behind an *Authorized* switch plus a scope note. No Flask, no pip install.
-
-See `reconx_gui/README.md` for the full details.
+See [`scorpion/README.md`](scorpion/README.md) for configuration, scope syntax,
+voice, and Telegram setup.
 
 Full Recon (Scriptable)
 
@@ -322,9 +339,9 @@ python -m modules.web.aquatone_clone app.example.com \
 📁 Project Structure
 
 ```
-ReconX/
-├── cli.py                       # Interactive menu (38 tools)
-├── recon.py                     # Full web recon (parallel, auto reports)
+Scorpion.ai/
+├── scorpion/                    # the autonomous agent (see scorpion/README.md)
+├── recon.py                     # Full web recon engine (parallel, auto reports)
 ├── README.md
 ├── LICENSE
 │
@@ -363,14 +380,17 @@ ReconX/
 │       ├── env_detect.py        # Environment detection
 │       └── http_client.py       # Differential analysis + WAF mutation engine
 │
-├── reconx_gui/                  # Browser UI for the same 38 tools (stdlib only)
-│   ├── server.py                # HTTP + SSE server, entrypoint
-│   ├── engine/                  # registry, bridge to modules/, builtins, jobs
-│   └── web/                     # index.html + static/app.js
+├── scorpion/                    # the agent
+│   ├── __main__.py              # `python3 -m scorpion` → dashboard
+│   ├── scope.py                 # the Scope Guard (fail-closed)
+│   ├── brain/                   # Claude API client + prompts
+│   ├── tools/                   # the 38 modules wrapped as agent tools
+│   ├── agent.py / planner.py    # orchestrator + no-LLM fallback
+│   ├── notify/                  # Telegram + voice
+│   ├── server.py + web/         # the dashboard
+│   └── tests/                   # loopback-only unittest suite
 │
-├── tests/                       # stdlib unittest suite (loopback only)
-│   ├── test_live_probe.py       # Prober parsing, probing, batches, reports
-│   └── test_screenshot_targets.py  # Screenshot target parsing + job setup
+├── tests/                       # module tests (loopback only)
 │
 └── outputs/                     # Generated reports (gitignored)
 ```

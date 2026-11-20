@@ -94,7 +94,8 @@ class ReconXDoctor:
             return
 
         python_files = list(modules_dir.glob("**/*.py"))
-        python_files.extend([self.root_dir / "cli.py", self.root_dir / "recon.py"])
+        python_files.extend((self.root_dir / "scorpion").glob("**/*.py"))
+        python_files.append(self.root_dir / "recon.py")
 
         for file_path in python_files:
             if not file_path.exists():
